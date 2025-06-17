@@ -239,45 +239,20 @@ export default function TokenSearch() {
                                         <span className="text-white text-sm">View on Solscan</span>
                                     </a>
 
-                                    {/* Axiom Links */}
+                                    {/* Single Axiom Link */}
                                     {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
-                                        <div className="space-y-2">
-                                            {tokenPairs.pairs.slice(0, 3).map((pair, index) => (
-                                                <a
-                                                    key={index}
-                                                    href={`https://axiom.trade/meme/${pair.pairAddress}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
-                                                >
-                                                    <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                                                        <span className="text-white text-xs font-bold">A</span>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <div className="text-white text-sm">Axiom - {pair.pairLabel}</div>
-                                                        <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
-                                                    </div>
-                                                </a>
-                                            ))}
-                                        </div>
+                                        <a
+                                            href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
+                                        >
+                                            <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold">A</span>
+                                            </div>
+                                            <span className="text-white text-sm">View in Axiom - Token/SOL</span>
+                                        </a>
                                     )}
-
-                                    {/* Pump.fun Token Info */}
-                                    {tokenData.name.toLowerCase().includes('pump') || tokenData.symbol.toLowerCase().includes('pump') ? (
-                                        <div className="bg-slate-700 rounded-lg p-3">
-                                            <div className="text-sm text-slate-300 mb-2">Pump.fun Token</div>
-                                            {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
-                                                <div className="space-y-1">
-                                                    {tokenPairs.pairs.filter(pair => pair.exchangeName.toLowerCase().includes('pump')).map((pair, index) => (
-                                                        <div key={index}>
-                                                            <div className="text-xs text-slate-400">PumpSwap Pair:</div>
-                                                            <div className="text-white font-mono text-xs break-all">{pair.pairAddress}</div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : null}
                                 </div>
                             </div>
 
@@ -309,29 +284,29 @@ export default function TokenSearch() {
                                     <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
                                 </div>
 
-                                {/* Trading Pairs */}
+                                {/* Trading Pairs - More Compact */}
                                 <div>
-                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
-                                        <CurrencyDollarIcon className="h-5 w-5" />
+                                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center space-x-2">
+                                        <CurrencyDollarIcon className="h-4 w-4" />
                                         <span>Trading Pairs</span>
                                     </h3>
 
                                     {isLoadingPairs ? (
-                                        <div className="flex items-center justify-center py-8">
-                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                                            <span className="ml-3 text-slate-400">Loading pairs...</span>
+                                        <div className="flex items-center justify-center py-6">
+                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                            <span className="ml-2 text-slate-400 text-sm">Loading pairs...</span>
                                         </div>
                                     ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
-                                        <div className="space-y-3">
+                                        <div className="space-y-2">
                                             {tokenPairs.pairs.slice(0, 5).map((pair, index) => (
-                                                <div key={index} className="bg-slate-700 rounded-lg p-4">
-                                                    <div className="flex items-center justify-between mb-2">
+                                                <div key={index} className="bg-slate-700 rounded-lg p-3">
+                                                    <div className="flex items-center justify-between mb-1">
                                                         <div className="flex items-center space-x-2">
                                                             {pair.exchangeLogo && (
                                                                 <img
                                                                     src={pair.exchangeLogo}
                                                                     alt={pair.exchangeName}
-                                                                    className="w-5 h-5 rounded-full"
+                                                                    className="w-4 h-4 rounded-full"
                                                                 />
                                                             )}
                                                             <div>
@@ -346,26 +321,26 @@ export default function TokenSearch() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                                    <div className="grid grid-cols-2 gap-2 text-xs">
                                                         <div>
-                                                            <div className="text-slate-400">Liquidity</div>
-                                                            <div className="text-white">{formatMarketCap(pair.liquidityUsd)}</div>
+                                                            <span className="text-slate-400">Liquidity: </span>
+                                                            <span className="text-white">{formatMarketCap(pair.liquidityUsd)}</span>
                                                         </div>
                                                         <div>
-                                                            <div className="text-slate-400">Pair Address</div>
-                                                            <div className="text-white font-mono break-all">{pair.pairAddress}</div>
+                                                            <span className="text-slate-400">Pair: </span>
+                                                            <span className="text-white font-mono">{pair.pairAddress.slice(0, 8)}...{pair.pairAddress.slice(-4)}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             ))}
                                             {tokenPairs.pairs.length > 5 && (
-                                                <div className="text-center text-slate-400 text-sm">
+                                                <div className="text-center text-slate-400 text-xs">
                                                     Showing top 5 pairs out of {tokenPairs.pairs.length} available
                                                 </div>
                                             )}
                                         </div>
                                     ) : (
-                                        <div className="text-center py-6 text-slate-400 text-sm">
+                                        <div className="text-center py-4 text-slate-400 text-sm">
                                             No trading pairs found for this token
                                         </div>
                                     )}
