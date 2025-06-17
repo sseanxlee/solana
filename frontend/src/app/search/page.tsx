@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiService, TokenPairsResponse } from '@/services/api';
+import { apiService, TokenPairsResponse, TokenMetadata } from '@/services/api';
 import { toast } from 'react-hot-toast';
 import { MagnifyingGlassIcon, ClockIcon, TrashIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -24,8 +24,10 @@ export default function TokenSearch() {
     const [searchQuery, setSearchQuery] = useState('');
     const [tokenData, setTokenData] = useState<TokenData | null>(null);
     const [tokenPairs, setTokenPairs] = useState<TokenPairsResponse | null>(null);
+    const [tokenMetadata, setTokenMetadata] = useState<TokenMetadata | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const [isLoadingPairs, setIsLoadingPairs] = useState(false);
+    const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
     const [searchHistory, setSearchHistory] = useState<TokenData[]>([]);
 
     useEffect(() => {
@@ -58,11 +60,35 @@ export default function TokenSearch() {
             }
         } catch (error: any) {
             console.error('Error fetching pairs:', error);
-            // Don't show error toast for pairs as it's supplementary data
             setTokenPairs(null);
         } finally {
             setIsLoadingPairs(false);
         }
+    };
+
+    const fetchTokenMetadata = async (tokenAddress: string) => {
+        try {
+            setIsLoadingMetadata(true);
+            const metadataResponse = await apiService.getTokenMetadata(tokenAddress);
+
+            if (metadataResponse.success && metadataResponse.data) {
+                setTokenMetadata(metadataResponse.data);
+            } else {
+                console.log('No metadata available for this token');
+                setTokenMetadata(null);
+            }
+        } catch (error: any) {
+            console.error('Error fetching metadata:', error);
+            setTokenMetadata(null);
+        } finally {
+            setIsLoadingMetadata(false);
+        }
+    };
+
+    const calculateMarketCap = () => {
+        if (!tokenData || !tokenMetadata) return 0;
+        const supply = parseFloat(tokenMetadata.totalSupplyFormatted);
+        return supply * tokenData.price;
     };
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -90,6 +116,7 @@ export default function TokenSearch() {
             setIsSearching(true);
             setTokenData(null);
             setTokenPairs(null);
+            setTokenMetadata(null);
 
             const response = await apiService.searchTokens(searchQuery.trim());
 
@@ -104,8 +131,9 @@ export default function TokenSearch() {
 
                 toast.success('Token data loaded successfully!');
 
-                // Fetch pairs data in parallel
+                // Fetch pairs and metadata data in parallel
                 fetchTokenPairs(tokenResult.address);
+                fetchTokenMetadata(tokenResult.address);
             } else {
                 toast.error('Token not found or invalid address');
             }
@@ -121,8 +149,10 @@ export default function TokenSearch() {
         setSearchQuery(token.address);
         setTokenData(token);
         setTokenPairs(null);
-        // Fetch pairs for historical selection
+        setTokenMetadata(null);
+        // Fetch pairs and metadata for historical selection
         fetchTokenPairs(token.address);
+        fetchTokenMetadata(token.address);
     };
 
     const clearHistory = () => {
@@ -258,25 +288,70 @@ export default function TokenSearch() {
 
                             {/* Right side - Token Details and Pairs */}
                             <div className="lg:col-span-3">
-                                {/* Basic Token Info */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                    <div className="bg-slate-700 rounded-lg p-4">
-                                        <div className="text-sm text-slate-400 mb-1">Name</div>
-                                        <div className="text-white font-medium">{tokenData.name}</div>
+                                {/* Token Logo and Basic Info */}
+                                <div className="flex items-start space-x-6 mb-6">
+                                    {/* Logo */}
+                                    <div className="flex-shrink-0">
+                                        {isLoadingMetadata ? (
+                                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
+                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                                            </div>
+                                        ) : tokenMetadata?.logo ? (
+                                            <img
+                                                src={tokenMetadata.logo}
+                                                alt={tokenData.name}
+                                                className="w-16 h-16 rounded-full object-cover bg-slate-700"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
+                                                <span className="text-white text-lg font-bold">
+                                                    {tokenData.symbol.charAt(0)}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="bg-slate-700 rounded-lg p-4">
-                                        <div className="text-sm text-slate-400 mb-1">Symbol</div>
-                                        <div className="text-white font-medium">{tokenData.symbol}</div>
-                                    </div>
-                                    <div className="bg-slate-700 rounded-lg p-4">
-                                        <div className="text-sm text-slate-400 mb-1">Price</div>
-                                        <div className="text-white font-medium">${formatPrice(tokenData.price)}</div>
-                                    </div>
-                                    <div className="bg-slate-700 rounded-lg p-4">
-                                        <div className="text-sm text-slate-400 mb-1">Market Cap</div>
-                                        <div className="text-white font-medium">{formatMarketCap(tokenData.market_cap || 0)}</div>
+
+                                    {/* Basic Token Info */}
+                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Name</div>
+                                            <div className="text-white font-medium">{tokenData.name}</div>
+                                        </div>
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Symbol</div>
+                                            <div className="text-white font-medium">{tokenData.symbol}</div>
+                                        </div>
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Price</div>
+                                            <div className="text-white font-medium">${formatPrice(tokenData.price)}</div>
+                                        </div>
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Market Cap</div>
+                                            <div className="text-white font-medium">{formatMarketCap(calculateMarketCap())}</div>
+                                        </div>
                                     </div>
                                 </div>
+
+                                {/* FDV and Supply Info */}
+                                {tokenMetadata && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Fully Diluted Value</div>
+                                            <div className="text-white font-medium">{formatMarketCap(parseFloat(tokenMetadata.fullyDilutedValue))}</div>
+                                        </div>
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Total Supply</div>
+                                            <div className="text-white font-medium">{parseFloat(tokenMetadata.totalSupplyFormatted).toLocaleString()} {tokenData.symbol}</div>
+                                        </div>
+                                        <div className="bg-slate-700 rounded-lg p-4">
+                                            <div className="text-sm text-slate-400 mb-1">Decimals</div>
+                                            <div className="text-white font-medium">{tokenMetadata.decimals}</div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Contract Address */}
                                 <div className="bg-slate-700 rounded-lg p-4 mb-6">

@@ -95,6 +95,32 @@ interface TokenPairsResponse {
     pairs: TokenPairData[];
 }
 
+interface TokenMetadata {
+    mint: string;
+    standard: string;
+    name: string;
+    symbol: string;
+    logo: string;
+    decimals: string;
+    metaplex: {
+        metadataUri: string;
+        masterEdition: boolean;
+        isMutable: boolean;
+        sellerFeeBasisPoints: number;
+        updateAuthority: string;
+        primarySaleHappened: number;
+    };
+    fullyDilutedValue: string;
+    totalSupply: string;
+    totalSupplyFormatted: string;
+    links: {
+        moralis: string;
+    };
+    description: string | null;
+    isVerifiedContract: boolean;
+    possibleSpam: boolean;
+}
+
 class ApiService {
     private authToken: string | null = null;
 
@@ -242,6 +268,10 @@ class ApiService {
         return this.request('GET', `/tokens/${tokenAddress}/pairs`);
     }
 
+    async getTokenMetadata(tokenAddress: string): Promise<ApiResponse<TokenMetadata>> {
+        return this.request('GET', `/tokens/${tokenAddress}/metadata`);
+    }
+
     // Profile endpoints
     async updateProfile(data: {
         email?: string;
@@ -276,5 +306,6 @@ export type {
     ApiResponse,
     TokenPair,
     TokenPairData,
-    TokenPairsResponse
+    TokenPairsResponse,
+    TokenMetadata
 }; 

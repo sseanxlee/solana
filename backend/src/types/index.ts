@@ -34,6 +34,32 @@ export interface TokenData {
     last_updated: Date;
 }
 
+export interface TokenMetadata {
+    mint: string;
+    standard: string;
+    name: string;
+    symbol: string;
+    logo: string;
+    decimals: string;
+    metaplex: {
+        metadataUri: string;
+        masterEdition: boolean;
+        isMutable: boolean;
+        sellerFeeBasisPoints: number;
+        updateAuthority: string;
+        primarySaleHappened: number;
+    };
+    fullyDilutedValue: string;
+    totalSupply: string;
+    totalSupplyFormatted: string;
+    links: {
+        moralis: string;
+    };
+    description: string | null;
+    isVerifiedContract: boolean;
+    possibleSpam: boolean;
+}
+
 export interface TokenPair {
     tokenAddress: string;
     tokenName: string;

@@ -167,4 +167,39 @@ router.get('/:address/pairs', async (req, res) => {
     }
 });
 
+// Get token metadata by address
+router.get('/:address/metadata', async (req, res) => {
+    try {
+        const { address } = req.params;
+
+        if (!address) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token address is required'
+            });
+        }
+
+        console.log(`Fetching token metadata for: ${address}`);
+        const metadataData = await tokenService.getTokenMetadata(address);
+
+        if (!metadataData) {
+            return res.status(404).json({
+                success: false,
+                error: 'No metadata found for this token'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: metadataData
+        });
+    } catch (error) {
+        console.error('Error fetching token metadata:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch token metadata'
+        });
+    }
+});
+
 export default router; 

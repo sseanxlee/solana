@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { query } from '../config/database';
-import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse } from '../types';
+import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse, TokenMetadata } from '../types';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const SOLANA_GATEWAY_URL = 'https://solana-gateway.moralis.io';
@@ -370,6 +370,40 @@ export class TokenService {
             return response.data;
         } catch (error) {
             console.error('Moralis pairs API error:', {
+                message: (error as any)?.message,
+                status: (error as any)?.response?.status,
+                statusText: (error as any)?.response?.statusText,
+                data: (error as any)?.response?.data,
+                url: (error as any)?.config?.url
+            });
+            return null;
+        }
+    }
+
+    async getTokenMetadata(tokenAddress: string): Promise<TokenMetadata | null> {
+        try {
+            if (!MORALIS_API_KEY) {
+                console.warn('Moralis API key not configured, skipping metadata fetch...');
+                return null;
+            }
+
+            console.log(`Fetching token metadata from Moralis for: ${tokenAddress}`);
+
+            const response = await axios.get(
+                `${SOLANA_GATEWAY_URL}/token/${SOLANA_CHAIN}/${tokenAddress}/metadata`,
+                {
+                    headers: {
+                        'X-API-Key': MORALIS_API_KEY,
+                        'accept': 'application/json',
+                    },
+                    timeout: 15000,
+                }
+            );
+
+            console.log('Moralis metadata response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Moralis metadata API error:', {
                 message: (error as any)?.message,
                 status: (error as any)?.response?.status,
                 statusText: (error as any)?.response?.statusText,
