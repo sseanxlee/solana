@@ -5,7 +5,35 @@ import { TokenService } from '../services/tokenService';
 const router = Router();
 const tokenService = new TokenService();
 
-// All token routes require authentication
+// Public token routes (no authentication required)
+// Get token analytics
+router.get('/:address/analytics', async (req, res) => {
+    try {
+        const { address } = req.params;
+
+        if (!address) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token address is required'
+            });
+        }
+
+        const analytics = await tokenService.getTokenAnalytics(address);
+
+        res.json({
+            success: true,
+            data: analytics
+        });
+    } catch (error: any) {
+        console.error('Error fetching token analytics:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to fetch token analytics'
+        });
+    }
+});
+
+// All other token routes require authentication
 router.use(authenticateToken);
 
 // Validate token address - fix the route path

@@ -95,30 +95,68 @@ interface TokenPairsResponse {
     pairs: TokenPairData[];
 }
 
-interface TokenMetadata {
-    mint: string;
-    standard: string;
+export interface TokenMetadata {
     name: string;
     symbol: string;
-    logo: string;
-    decimals: string;
-    metaplex: {
-        metadataUri: string;
-        masterEdition: boolean;
-        isMutable: boolean;
-        sellerFeeBasisPoints: number;
-        updateAuthority: string;
-        primarySaleHappened: number;
-    };
-    fullyDilutedValue: string;
+    decimals: number;
+    logo?: string;
     totalSupply: string;
     totalSupplyFormatted: string;
-    links: {
-        moralis: string;
+}
+
+export interface TokenAnalytics {
+    tokenAddress: string;
+    totalBuyVolume: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
     };
-    description: string | null;
-    isVerifiedContract: boolean;
-    possibleSpam: boolean;
+    totalSellVolume: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalBuyers: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalSellers: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalBuys: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalSells: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    uniqueWallets: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    pricePercentChange: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    usdPrice: string;
+    totalLiquidityUsd: string;
+    totalFullyDilutedValuation: string;
 }
 
 class ApiService {
@@ -272,6 +310,11 @@ class ApiService {
         return this.request('GET', `/tokens/${tokenAddress}/metadata`);
     }
 
+    async getTokenAnalytics(tokenAddress: string): Promise<ApiResponse<TokenAnalytics>> {
+        const response = await fetch(`${API_BASE_URL}/tokens/${tokenAddress}/analytics`);
+        return response.json();
+    }
+
     // Profile endpoints
     async updateProfile(data: {
         email?: string;
@@ -307,5 +350,6 @@ export type {
     TokenPair,
     TokenPairData,
     TokenPairsResponse,
-    TokenMetadata
+    TokenMetadata,
+    TokenAnalytics
 }; 

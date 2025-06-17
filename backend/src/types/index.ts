@@ -143,4 +143,59 @@ export interface JupiterPriceData {
         };
     };
     timeTaken: number;
+}
+
+export interface TokenAnalytics {
+    tokenAddress: string;
+    totalBuyVolume: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalSellVolume: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalBuyers: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalSellers: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalBuys: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    totalSells: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    uniqueWallets: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    pricePercentChange: {
+        '5m': number;
+        '1h': number;
+        '6h': number;
+        '24h': number;
+    };
+    usdPrice: string;
+    totalLiquidityUsd: string;
+    totalFullyDilutedValuation: string;
 } 
