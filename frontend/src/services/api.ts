@@ -63,6 +63,38 @@ interface NonceResponse {
     nonce: string;
 }
 
+interface TokenPair {
+    tokenAddress: string;
+    tokenName: string;
+    tokenSymbol: string;
+    tokenLogo: string;
+    tokenDecimals: string;
+    pairTokenType: string;
+    liquidityUsd: number;
+}
+
+interface TokenPairData {
+    exchangeAddress: string;
+    exchangeName: string;
+    exchangeLogo: string;
+    pairLabel: string;
+    pairAddress: string;
+    usdPrice: number;
+    usdPrice24hrPercentChange: number;
+    usdPrice24hrUsdChange: number;
+    liquidityUsd: number;
+    baseToken: string;
+    quoteToken: string;
+    pair: TokenPair[];
+}
+
+interface TokenPairsResponse {
+    cursor?: string;
+    pageSize: number;
+    page: number;
+    pairs: TokenPairData[];
+}
+
 class ApiService {
     private authToken: string | null = null;
 
@@ -206,6 +238,10 @@ class ApiService {
         return this.request('GET', `/tokens/search?query=${encodeURIComponent(query)}`);
     }
 
+    async getTokenPairs(tokenAddress: string): Promise<ApiResponse<TokenPairsResponse>> {
+        return this.request('GET', `/tokens/${tokenAddress}/pairs`);
+    }
+
     // Profile endpoints
     async updateProfile(data: {
         email?: string;
@@ -233,4 +269,12 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export type { TokenAlert, CreateAlertRequest, UpdateAlertRequest, ApiResponse }; 
+export type {
+    TokenAlert,
+    CreateAlertRequest,
+    UpdateAlertRequest,
+    ApiResponse,
+    TokenPair,
+    TokenPairData,
+    TokenPairsResponse
+}; 

@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { apiService } from '@/services/api';
+import { apiService, TokenPairsResponse } from '@/services/api';
 import { toast } from 'react-hot-toast';
-import { MagnifyingGlassIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ClockIcon, TrashIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import DashboardLayout from '@/components/DashboardLayout';
 
 interface TokenData {
@@ -23,7 +23,9 @@ export default function TokenSearch() {
     const router = useRouter();
     const [searchQuery, setSearchQuery] = useState('');
     const [tokenData, setTokenData] = useState<TokenData | null>(null);
+    const [tokenPairs, setTokenPairs] = useState<TokenPairsResponse | null>(null);
     const [isSearching, setIsSearching] = useState(false);
+    const [isLoadingPairs, setIsLoadingPairs] = useState(false);
     const [searchHistory, setSearchHistory] = useState<TokenData[]>([]);
 
     useEffect(() => {
@@ -42,6 +44,26 @@ export default function TokenSearch() {
             }
         }
     }, [isAuthenticated, authLoading, router]);
+
+    const fetchTokenPairs = async (tokenAddress: string) => {
+        try {
+            setIsLoadingPairs(true);
+            const pairsResponse = await apiService.getTokenPairs(tokenAddress);
+
+            if (pairsResponse.success && pairsResponse.data) {
+                setTokenPairs(pairsResponse.data);
+            } else {
+                console.log('No pairs data available for this token');
+                setTokenPairs(null);
+            }
+        } catch (error: any) {
+            console.error('Error fetching pairs:', error);
+            // Don't show error toast for pairs as it's supplementary data
+            setTokenPairs(null);
+        } finally {
+            setIsLoadingPairs(false);
+        }
+    };
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -67,6 +89,7 @@ export default function TokenSearch() {
         try {
             setIsSearching(true);
             setTokenData(null);
+            setTokenPairs(null);
 
             const response = await apiService.searchTokens(searchQuery.trim());
 
@@ -80,6 +103,9 @@ export default function TokenSearch() {
                 localStorage.setItem('token_search_history', JSON.stringify(newHistory));
 
                 toast.success('Token data loaded successfully!');
+
+                // Fetch pairs data in parallel
+                fetchTokenPairs(tokenResult.address);
             } else {
                 toast.error('Token not found or invalid address');
             }
@@ -94,6 +120,9 @@ export default function TokenSearch() {
     const handleHistorySelect = (token: TokenData) => {
         setSearchQuery(token.address);
         setTokenData(token);
+        setTokenPairs(null);
+        // Fetch pairs for historical selection
+        fetchTokenPairs(token.address);
     };
 
     const clearHistory = () => {
@@ -212,6 +241,70 @@ export default function TokenSearch() {
                             <div className="text-sm text-slate-400 mb-1">Contract Address</div>
                             <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
                         </div>
+                    </div>
+                )}
+
+                {/* Token Pairs */}
+                {tokenData && (
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+                        <h2 className="text-xl font-semibold text-white mb-4 flex items-center space-x-2">
+                            <CurrencyDollarIcon className="h-5 w-5" />
+                            <span>Trading Pairs</span>
+                        </h2>
+
+                        {isLoadingPairs ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                                <span className="ml-3 text-slate-400">Loading pairs...</span>
+                            </div>
+                        ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
+                            <div className="space-y-4">
+                                {tokenPairs.pairs.slice(0, 5).map((pair, index) => (
+                                    <div key={index} className="bg-slate-700 rounded-lg p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center space-x-3">
+                                                {pair.exchangeLogo && (
+                                                    <img
+                                                        src={pair.exchangeLogo}
+                                                        alt={pair.exchangeName}
+                                                        className="w-6 h-6 rounded-full"
+                                                    />
+                                                )}
+                                                <div>
+                                                    <div className="text-white font-medium">{pair.pairLabel}</div>
+                                                    <div className="text-slate-400 text-sm">{pair.exchangeName}</div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-white font-medium">${formatPrice(pair.usdPrice)}</div>
+                                                <div className={`text-sm ${pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    {pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}{pair.usdPrice24hrPercentChange.toFixed(2)}%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                                <div className="text-slate-400">Liquidity</div>
+                                                <div className="text-white">{formatMarketCap(pair.liquidityUsd)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-slate-400">Pair Address</div>
+                                                <div className="text-white font-mono text-xs break-all">{pair.pairAddress}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {tokenPairs.pairs.length > 5 && (
+                                    <div className="text-center text-slate-400 text-sm">
+                                        Showing top 5 pairs out of {tokenPairs.pairs.length} available
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 text-slate-400">
+                                No trading pairs found for this token
+                            </div>
+                        )}
                     </div>
                 )}
 

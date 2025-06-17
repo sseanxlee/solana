@@ -34,6 +34,38 @@ export interface TokenData {
     last_updated: Date;
 }
 
+export interface TokenPair {
+    tokenAddress: string;
+    tokenName: string;
+    tokenSymbol: string;
+    tokenLogo: string;
+    tokenDecimals: string;
+    pairTokenType: string;
+    liquidityUsd: number;
+}
+
+export interface TokenPairData {
+    exchangeAddress: string;
+    exchangeName: string;
+    exchangeLogo: string;
+    pairLabel: string;
+    pairAddress: string;
+    usdPrice: number;
+    usdPrice24hrPercentChange: number;
+    usdPrice24hrUsdChange: number;
+    liquidityUsd: number;
+    baseToken: string;
+    quoteToken: string;
+    pair: TokenPair[];
+}
+
+export interface TokenPairsResponse {
+    cursor?: string;
+    pageSize: number;
+    page: number;
+    pairs: TokenPairData[];
+}
+
 export interface NotificationQueue {
     id: string;
     alert_id: string;

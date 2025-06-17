@@ -132,4 +132,39 @@ router.get('/:address', async (req, res) => {
     }
 });
 
+// Get token pairs by address
+router.get('/:address/pairs', async (req, res) => {
+    try {
+        const { address } = req.params;
+
+        if (!address) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token address is required'
+            });
+        }
+
+        console.log(`Fetching token pairs for: ${address}`);
+        const pairsData = await tokenService.getTokenPairs(address);
+
+        if (!pairsData) {
+            return res.status(404).json({
+                success: false,
+                error: 'No pairs found for this token'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: pairsData
+        });
+    } catch (error) {
+        console.error('Error fetching token pairs:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch token pairs'
+        });
+    }
+});
+
 export default router; 

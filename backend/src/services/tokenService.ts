@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { query } from '../config/database';
-import { TokenData, MoralisTokenData, JupiterPriceData } from '../types';
+import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse } from '../types';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const SOLANA_GATEWAY_URL = 'https://solana-gateway.moralis.io';
@@ -341,5 +341,42 @@ export class TokenService {
         }
 
         return prices;
+    }
+
+    async getTokenPairs(tokenAddress: string): Promise<TokenPairsResponse | null> {
+        try {
+            if (!MORALIS_API_KEY) {
+                console.warn('Moralis API key not configured, skipping pairs fetch...');
+                return null;
+            }
+
+            console.log(`Fetching token pairs from Moralis for: ${tokenAddress}`);
+
+            const response = await axios.get(
+                `${SOLANA_GATEWAY_URL}/token/${SOLANA_CHAIN}/${tokenAddress}/pairs`,
+                {
+                    headers: {
+                        'X-API-Key': MORALIS_API_KEY,
+                        'accept': 'application/json',
+                    },
+                    params: {
+                        limit: 10 // Limit to 10 pairs for better performance
+                    },
+                    timeout: 15000,
+                }
+            );
+
+            console.log('Moralis pairs response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Moralis pairs API error:', {
+                message: (error as any)?.message,
+                status: (error as any)?.response?.status,
+                statusText: (error as any)?.response?.statusText,
+                data: (error as any)?.response?.data,
+                url: (error as any)?.config?.url
+            });
+            return null;
+        }
     }
 } 
