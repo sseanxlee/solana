@@ -86,9 +86,23 @@ export default function TokenSearch() {
     };
 
     const calculateMarketCap = () => {
-        if (!tokenData || !tokenMetadata) return 0;
+        if (!tokenMetadata) return 0;
+
         const supply = parseFloat(tokenMetadata.totalSupplyFormatted);
-        return supply * tokenData.price;
+
+        // Use highest liquidity pair's price if available
+        if (tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0) {
+            const sortedPairs = [...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
+            const highestLiquidityPrice = sortedPairs[0].usdPrice;
+            return supply * highestLiquidityPrice;
+        }
+
+        // Fallback to token data price
+        if (tokenData) {
+            return supply * tokenData.price;
+        }
+
+        return 0;
     };
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -335,13 +349,9 @@ export default function TokenSearch() {
                                     </div>
                                 </div>
 
-                                {/* FDV and Supply Info */}
+                                {/* Supply Info */}
                                 {tokenMetadata && (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Fully Diluted Value</div>
-                                            <div className="text-white font-medium">{formatMarketCap(parseFloat(tokenMetadata.fullyDilutedValue))}</div>
-                                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                         <div className="bg-slate-700 rounded-lg p-4">
                                             <div className="text-sm text-slate-400 mb-1">Total Supply</div>
                                             <div className="text-white font-medium">{parseFloat(tokenMetadata.totalSupplyFormatted).toLocaleString()} {tokenData.symbol}</div>
@@ -373,44 +383,50 @@ export default function TokenSearch() {
                                         </div>
                                     ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
                                         <div className="space-y-2">
-                                            {tokenPairs.pairs.slice(0, 5).map((pair, index) => (
-                                                <div key={index} className="bg-slate-700 rounded-lg p-3">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <div className="flex items-center space-x-2">
-                                                            {pair.exchangeLogo && (
-                                                                <img
-                                                                    src={pair.exchangeLogo}
-                                                                    alt={pair.exchangeName}
-                                                                    className="w-4 h-4 rounded-full"
-                                                                />
-                                                            )}
+                                            {tokenPairs.pairs
+                                                .sort((a, b) => b.liquidityUsd - a.liquidityUsd)
+                                                .slice(0, 2)
+                                                .map((pair, index) => (
+                                                    <div key={index} className="bg-slate-700 rounded-lg p-3">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <div className="flex items-center space-x-2">
+                                                                {pair.exchangeLogo && (
+                                                                    <img
+                                                                        src={pair.exchangeLogo}
+                                                                        alt={pair.exchangeName}
+                                                                        className="w-4 h-4 rounded-full"
+                                                                    />
+                                                                )}
+                                                                <div>
+                                                                    <div className="text-white font-medium text-sm">{pair.pairLabel}</div>
+                                                                    <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-white font-medium text-sm">${formatPrice(pair.usdPrice)}</div>
+                                                                <div className={`text-xs ${pair.usdPrice24hrPercentChange && pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                    {pair.usdPrice24hrPercentChange !== null ?
+                                                                        `${pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}${pair.usdPrice24hrPercentChange.toFixed(2)}%` :
+                                                                        'N/A'
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-2 text-xs">
                                                             <div>
-                                                                <div className="text-white font-medium text-sm">{pair.pairLabel}</div>
-                                                                <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
+                                                                <span className="text-slate-400">Liquidity: </span>
+                                                                <span className="text-white">{formatMarketCap(pair.liquidityUsd)}</span>
                                                             </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="text-white font-medium text-sm">${formatPrice(pair.usdPrice)}</div>
-                                                            <div className={`text-xs ${pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                {pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}{pair.usdPrice24hrPercentChange.toFixed(2)}%
+                                                            <div>
+                                                                <span className="text-slate-400">Pair: </span>
+                                                                <span className="text-white font-mono">{pair.pairAddress.slice(0, 8)}...{pair.pairAddress.slice(-4)}</span>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 gap-2 text-xs">
-                                                        <div>
-                                                            <span className="text-slate-400">Liquidity: </span>
-                                                            <span className="text-white">{formatMarketCap(pair.liquidityUsd)}</span>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-slate-400">Pair: </span>
-                                                            <span className="text-white font-mono">{pair.pairAddress.slice(0, 8)}...{pair.pairAddress.slice(-4)}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {tokenPairs.pairs.length > 5 && (
+                                                ))}
+                                            {tokenPairs.pairs.length > 2 && (
                                                 <div className="text-center text-slate-400 text-xs">
-                                                    Showing top 5 pairs out of {tokenPairs.pairs.length} available
+                                                    Showing top 2 highest liquidity pairs out of {tokenPairs.pairs.length} available
                                                 </div>
                                             )}
                                         </div>
