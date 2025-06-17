@@ -219,92 +219,159 @@ export default function TokenSearch() {
                 {tokenData && (
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
                         <h2 className="text-xl font-semibold text-white mb-4">Token Information</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="bg-slate-700 rounded-lg p-4">
-                                <div className="text-sm text-slate-400 mb-1">Name</div>
-                                <div className="text-white font-medium">{tokenData.name}</div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                            {/* Left side - External Links */}
+                            <div className="lg:col-span-1">
+                                <div className="space-y-3">
+                                    <h3 className="text-sm font-medium text-slate-300 mb-3">External Tools</h3>
+
+                                    {/* Solscan Link */}
+                                    <a
+                                        href={`https://solscan.io/token/${tokenData.address}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
+                                    >
+                                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                                            <span className="text-white text-xs font-bold">S</span>
+                                        </div>
+                                        <span className="text-white text-sm">View on Solscan</span>
+                                    </a>
+
+                                    {/* Axiom Links */}
+                                    {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
+                                        <div className="space-y-2">
+                                            {tokenPairs.pairs.slice(0, 3).map((pair, index) => (
+                                                <a
+                                                    key={index}
+                                                    href={`https://axiom.trade/meme/${pair.pairAddress}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
+                                                >
+                                                    <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-white text-xs font-bold">A</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-white text-sm">Axiom - {pair.pairLabel}</div>
+                                                        <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
+                                                    </div>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Pump.fun Token Info */}
+                                    {tokenData.name.toLowerCase().includes('pump') || tokenData.symbol.toLowerCase().includes('pump') ? (
+                                        <div className="bg-slate-700 rounded-lg p-3">
+                                            <div className="text-sm text-slate-300 mb-2">Pump.fun Token</div>
+                                            {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
+                                                <div className="space-y-1">
+                                                    {tokenPairs.pairs.filter(pair => pair.exchangeName.toLowerCase().includes('pump')).map((pair, index) => (
+                                                        <div key={index}>
+                                                            <div className="text-xs text-slate-400">PumpSwap Pair:</div>
+                                                            <div className="text-white font-mono text-xs break-all">{pair.pairAddress}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
-                            <div className="bg-slate-700 rounded-lg p-4">
-                                <div className="text-sm text-slate-400 mb-1">Symbol</div>
-                                <div className="text-white font-medium">{tokenData.symbol}</div>
-                            </div>
-                            <div className="bg-slate-700 rounded-lg p-4">
-                                <div className="text-sm text-slate-400 mb-1">Price</div>
-                                <div className="text-white font-medium">${formatPrice(tokenData.price)}</div>
-                            </div>
-                            <div className="bg-slate-700 rounded-lg p-4">
-                                <div className="text-sm text-slate-400 mb-1">Market Cap</div>
-                                <div className="text-white font-medium">{formatMarketCap(tokenData.market_cap || 0)}</div>
+
+                            {/* Right side - Token Details and Pairs */}
+                            <div className="lg:col-span-3">
+                                {/* Basic Token Info */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                                    <div className="bg-slate-700 rounded-lg p-4">
+                                        <div className="text-sm text-slate-400 mb-1">Name</div>
+                                        <div className="text-white font-medium">{tokenData.name}</div>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg p-4">
+                                        <div className="text-sm text-slate-400 mb-1">Symbol</div>
+                                        <div className="text-white font-medium">{tokenData.symbol}</div>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg p-4">
+                                        <div className="text-sm text-slate-400 mb-1">Price</div>
+                                        <div className="text-white font-medium">${formatPrice(tokenData.price)}</div>
+                                    </div>
+                                    <div className="bg-slate-700 rounded-lg p-4">
+                                        <div className="text-sm text-slate-400 mb-1">Market Cap</div>
+                                        <div className="text-white font-medium">{formatMarketCap(tokenData.market_cap || 0)}</div>
+                                    </div>
+                                </div>
+
+                                {/* Contract Address */}
+                                <div className="bg-slate-700 rounded-lg p-4 mb-6">
+                                    <div className="text-sm text-slate-400 mb-1">Contract Address</div>
+                                    <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
+                                </div>
+
+                                {/* Trading Pairs */}
+                                <div>
+                                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center space-x-2">
+                                        <CurrencyDollarIcon className="h-5 w-5" />
+                                        <span>Trading Pairs</span>
+                                    </h3>
+
+                                    {isLoadingPairs ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                                            <span className="ml-3 text-slate-400">Loading pairs...</span>
+                                        </div>
+                                    ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {tokenPairs.pairs.slice(0, 5).map((pair, index) => (
+                                                <div key={index} className="bg-slate-700 rounded-lg p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center space-x-2">
+                                                            {pair.exchangeLogo && (
+                                                                <img
+                                                                    src={pair.exchangeLogo}
+                                                                    alt={pair.exchangeName}
+                                                                    className="w-5 h-5 rounded-full"
+                                                                />
+                                                            )}
+                                                            <div>
+                                                                <div className="text-white font-medium text-sm">{pair.pairLabel}</div>
+                                                                <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-white font-medium text-sm">${formatPrice(pair.usdPrice)}</div>
+                                                            <div className={`text-xs ${pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                {pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}{pair.usdPrice24hrPercentChange.toFixed(2)}%
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                                        <div>
+                                                            <div className="text-slate-400">Liquidity</div>
+                                                            <div className="text-white">{formatMarketCap(pair.liquidityUsd)}</div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-slate-400">Pair Address</div>
+                                                            <div className="text-white font-mono break-all">{pair.pairAddress}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {tokenPairs.pairs.length > 5 && (
+                                                <div className="text-center text-slate-400 text-sm">
+                                                    Showing top 5 pairs out of {tokenPairs.pairs.length} available
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-6 text-slate-400 text-sm">
+                                            No trading pairs found for this token
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        <div className="mt-4 bg-slate-700 rounded-lg p-4">
-                            <div className="text-sm text-slate-400 mb-1">Contract Address</div>
-                            <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Token Pairs */}
-                {tokenData && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <h2 className="text-xl font-semibold text-white mb-4 flex items-center space-x-2">
-                            <CurrencyDollarIcon className="h-5 w-5" />
-                            <span>Trading Pairs</span>
-                        </h2>
-
-                        {isLoadingPairs ? (
-                            <div className="flex items-center justify-center py-8">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                                <span className="ml-3 text-slate-400">Loading pairs...</span>
-                            </div>
-                        ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
-                            <div className="space-y-4">
-                                {tokenPairs.pairs.slice(0, 5).map((pair, index) => (
-                                    <div key={index} className="bg-slate-700 rounded-lg p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center space-x-3">
-                                                {pair.exchangeLogo && (
-                                                    <img
-                                                        src={pair.exchangeLogo}
-                                                        alt={pair.exchangeName}
-                                                        className="w-6 h-6 rounded-full"
-                                                    />
-                                                )}
-                                                <div>
-                                                    <div className="text-white font-medium">{pair.pairLabel}</div>
-                                                    <div className="text-slate-400 text-sm">{pair.exchangeName}</div>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-white font-medium">${formatPrice(pair.usdPrice)}</div>
-                                                <div className={`text-sm ${pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                    {pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}{pair.usdPrice24hrPercentChange.toFixed(2)}%
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4 text-sm">
-                                            <div>
-                                                <div className="text-slate-400">Liquidity</div>
-                                                <div className="text-white">{formatMarketCap(pair.liquidityUsd)}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-slate-400">Pair Address</div>
-                                                <div className="text-white font-mono text-xs break-all">{pair.pairAddress}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                {tokenPairs.pairs.length > 5 && (
-                                    <div className="text-center text-slate-400 text-sm">
-                                        Showing top 5 pairs out of {tokenPairs.pairs.length} available
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 text-slate-400">
-                                No trading pairs found for this token
-                            </div>
-                        )}
                     </div>
                 )}
 
