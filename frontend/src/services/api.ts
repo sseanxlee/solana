@@ -159,6 +159,77 @@ export interface TokenAnalytics {
     totalFullyDilutedValuation: string;
 }
 
+export interface TokenPairStats {
+    tokenAddress: string;
+    tokenName: string;
+    tokenSymbol: string;
+    tokenLogo: string;
+    pairCreated: string | null;
+    pairLabel: string;
+    pairAddress: string;
+    exchange: string;
+    exchangeAddress: string;
+    exchangeLogo: string;
+    exchangeUrl: string | null;
+    currentUsdPrice: string;
+    currentNativePrice: string;
+    totalLiquidityUsd: string;
+    pricePercentChange: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    liquidityPercentChange: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buys: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sells: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    totalVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buyVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sellVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buyers: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sellers: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+}
+
 class ApiService {
     private authToken: string | null = null;
 
@@ -315,6 +386,11 @@ class ApiService {
         return response.json();
     }
 
+    async getPairStats(pairAddress: string): Promise<ApiResponse<TokenPairStats>> {
+        const response = await fetch(`${API_BASE_URL}/tokens/pairs/${pairAddress}/stats`);
+        return response.json();
+    }
+
     // Profile endpoints
     async updateProfile(data: {
         email?: string;
@@ -349,7 +425,5 @@ export type {
     ApiResponse,
     TokenPair,
     TokenPairData,
-    TokenPairsResponse,
-    TokenMetadata,
-    TokenAnalytics
+    TokenPairsResponse
 }; 

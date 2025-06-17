@@ -33,6 +33,33 @@ router.get('/:address/analytics', async (req, res) => {
     }
 });
 
+// Get pair stats by pair address
+router.get('/pairs/:pairAddress/stats', async (req, res) => {
+    try {
+        const { pairAddress } = req.params;
+
+        if (!pairAddress) {
+            return res.status(400).json({
+                success: false,
+                error: 'Pair address is required'
+            });
+        }
+
+        const pairStats = await tokenService.getPairStats(pairAddress);
+
+        res.json({
+            success: true,
+            data: pairStats
+        });
+    } catch (error: any) {
+        console.error('Error fetching pair stats:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to fetch pair stats'
+        });
+    }
+});
+
 // All other token routes require authentication
 router.use(authenticateToken);
 

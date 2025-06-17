@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { query } from '../config/database';
-import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse, TokenMetadata, TokenAnalytics } from '../types';
+import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse, TokenMetadata, TokenAnalytics, TokenPairStats } from '../types';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const SOLANA_GATEWAY_URL = 'https://solana-gateway.moralis.io';
@@ -410,6 +410,24 @@ export class TokenService {
 
         if (!response.ok) {
             throw new Error(`Failed to fetch token analytics: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data;
+    }
+
+    async getPairStats(pairAddress: string): Promise<TokenPairStats> {
+        const response = await fetch(
+            `https://solana-gateway.moralis.io/token/mainnet/pairs/${pairAddress}/stats`,
+            {
+                headers: {
+                    'X-API-Key': process.env.MORALIS_API_KEY || ''
+                }
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch pair stats: ${response.statusText}`);
         }
 
         const data = await response.json();

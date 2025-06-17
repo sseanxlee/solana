@@ -198,4 +198,75 @@ export interface TokenAnalytics {
     usdPrice: string;
     totalLiquidityUsd: string;
     totalFullyDilutedValuation: string;
+}
+
+export interface TokenPairStats {
+    tokenAddress: string;
+    tokenName: string;
+    tokenSymbol: string;
+    tokenLogo: string;
+    pairCreated: string | null;
+    pairLabel: string;
+    pairAddress: string;
+    exchange: string;
+    exchangeAddress: string;
+    exchangeLogo: string;
+    exchangeUrl: string | null;
+    currentUsdPrice: string;
+    currentNativePrice: string;
+    totalLiquidityUsd: string;
+    pricePercentChange: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    liquidityPercentChange: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buys: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sells: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    totalVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buyVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sellVolume: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    buyers: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
+    sellers: {
+        '5min': number;
+        '1h': number;
+        '4h': number;
+        '24h': number;
+    };
 } 

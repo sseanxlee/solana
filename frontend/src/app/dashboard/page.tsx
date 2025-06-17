@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { apiService, TokenAlert, TokenMetadata, TokenAnalytics } from '../../services/api';
+import { apiService, TokenAlert, TokenMetadata, TokenAnalytics, TokenPairStats } from '../../services/api';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import DashboardLayout from '../../components/DashboardLayout';
@@ -16,9 +16,8 @@ interface TrendingTokenData {
     symbol: string;
     price: number | string;
     logo?: string;
-    metadata?: TokenMetadata;
-    analytics?: TokenAnalytics;
-    // Calculated from analytics
+    pairStats?: TokenPairStats;
+    // Calculated from pair stats
     age: string;
     txns: number;
     volume: number;
@@ -95,55 +94,52 @@ export default function Dashboard() {
 
             for (const address of TRENDING_TOKENS) {
                 try {
-                    // Fetch token data, metadata, and analytics in parallel
-                    const [tokenResponse, metadataResponse, analyticsResponse] = await Promise.allSettled([
+                    // First get token pairs to find the primary pair address
+                    const [tokenResponse, pairsResponse] = await Promise.allSettled([
                         apiService.searchTokens(address),
-                        apiService.getTokenMetadata(address),
-                        apiService.getTokenAnalytics(address)
+                        apiService.getTokenPairs(address)
                     ]);
 
                     let tokenData = null;
-                    let metadata = null;
-                    let analytics = null;
+                    let primaryPairAddress = null;
 
                     if (tokenResponse.status === 'fulfilled' && tokenResponse.value.success && tokenResponse.value.data?.[0]) {
                         tokenData = tokenResponse.value.data[0];
                     }
 
-                    if (metadataResponse.status === 'fulfilled' && metadataResponse.value.success && metadataResponse.value.data) {
-                        metadata = metadataResponse.value.data;
+                    if (pairsResponse.status === 'fulfilled' && pairsResponse.value.success && pairsResponse.value.data?.pairs?.[0]) {
+                        primaryPairAddress = pairsResponse.value.data.pairs[0].pairAddress;
                     }
 
-                    if (analyticsResponse.status === 'fulfilled' && analyticsResponse.value.success && analyticsResponse.value.data) {
-                        analytics = analyticsResponse.value.data;
-                    }
+                    if (tokenData && primaryPairAddress) {
+                        // Now get pair stats for the primary pair
+                        const pairStatsResponse = await apiService.getPairStats(primaryPairAddress);
 
-                    if (tokenData) {
-                        // Use real analytics data or fallback to placeholder values
+                        let pairStats = null;
+                        if (pairStatsResponse.success && pairStatsResponse.data) {
+                            pairStats = pairStatsResponse.data;
+                        }
+
+                        // Use real pair stats data
                         const realData: TrendingTokenData = {
                             address,
-                            name: tokenData.name,
-                            symbol: tokenData.symbol,
-                            price: tokenData.price,
-                            logo: metadata?.logo,
-                            metadata: metadata || undefined,
-                            analytics: analytics || undefined,
-                            age: generateTokenAge(), // Still need to calculate this from creation date
-                            txns: analytics ? analytics.totalBuys['24h'] + analytics.totalSells['24h'] : Math.floor(Math.random() * 100000) + 1000,
-                            volume: analytics ? analytics.totalBuyVolume['24h'] + analytics.totalSellVolume['24h'] : Math.floor(Math.random() * 10000000) + 100000,
-                            makers: analytics ? analytics.uniqueWallets['24h'] : Math.floor(Math.random() * 50000) + 1000,
+                            name: pairStats?.tokenName || tokenData.name,
+                            symbol: pairStats?.tokenSymbol || tokenData.symbol,
+                            price: pairStats?.currentUsdPrice || tokenData.price,
+                            logo: pairStats?.tokenLogo,
+                            pairStats: pairStats || undefined,
+                            age: generateTokenAge(), // Still need creation date
+                            txns: pairStats ? pairStats.buys['24h'] + pairStats.sells['24h'] : Math.floor(Math.random() * 100000) + 1000,
+                            volume: pairStats ? pairStats.totalVolume['24h'] : Math.floor(Math.random() * 10000000) + 100000,
+                            makers: pairStats ? pairStats.buyers['24h'] + pairStats.sellers['24h'] : Math.floor(Math.random() * 50000) + 1000,
                             changes: {
-                                '5m': analytics?.pricePercentChange['5m'] || (Math.random() - 0.5) * 20,
-                                '1h': analytics?.pricePercentChange['1h'] || (Math.random() - 0.5) * 30,
-                                '6h': analytics?.pricePercentChange['6h'] || (Math.random() - 0.5) * 50,
-                                '24h': analytics?.pricePercentChange['24h'] || (Math.random() - 0.5) * 100
+                                '5m': pairStats?.pricePercentChange['5min'] || (Math.random() - 0.5) * 20,
+                                '1h': pairStats?.pricePercentChange['1h'] || (Math.random() - 0.5) * 30,
+                                '6h': pairStats?.pricePercentChange['4h'] || (Math.random() - 0.5) * 50, // Using 4h for 6h
+                                '24h': pairStats?.pricePercentChange['24h'] || (Math.random() - 0.5) * 100
                             },
-                            liquidity: analytics ? parseFloat(analytics.totalLiquidityUsd) : Math.floor(Math.random() * 1000000) + 50000,
-                            marketCap: analytics ?
-                                parseFloat(analytics.totalFullyDilutedValuation) :
-                                (metadata ?
-                                    parseFloat(metadata.totalSupplyFormatted) * (typeof tokenData.price === 'string' ? parseFloat(tokenData.price) : tokenData.price) :
-                                    Math.floor(Math.random() * 50000000) + 1000000)
+                            liquidity: pairStats ? parseFloat(pairStats.totalLiquidityUsd) : Math.floor(Math.random() * 1000000) + 50000,
+                            marketCap: Math.floor(Math.random() * 50000000) + 1000000 // Still need to calculate from supply
                         };
 
                         trendingData.push(realData);
