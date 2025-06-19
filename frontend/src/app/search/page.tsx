@@ -107,24 +107,24 @@ function WatchlistContent() {
         }
     };
 
+    const getCurrentPrice = () => {
+        // Use highest liquidity pair's price if available
+        if (tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0) {
+            const sortedPairs = [...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
+            return sortedPairs[0].usdPrice;
+        }
+
+        // Fallback to token data price
+        return tokenData?.price || 0;
+    };
+
     const calculateMarketCap = () => {
         if (!tokenMetadata) return 0;
 
         const supply = parseFloat(tokenMetadata.totalSupplyFormatted);
+        const currentPrice = getCurrentPrice();
 
-        // Use highest liquidity pair's price if available
-        if (tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0) {
-            const sortedPairs = [...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
-            const highestLiquidityPrice = sortedPairs[0].usdPrice;
-            return supply * highestLiquidityPrice;
-        }
-
-        // Fallback to token data price
-        if (tokenData) {
-            return supply * tokenData.price;
-        }
-
-        return 0;
+        return supply * currentPrice;
     };
 
     const formatPrice = (price: number) => {
@@ -167,8 +167,17 @@ function WatchlistContent() {
         <DashboardLayout>
             <div className="space-y-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">Watchlist</h1>
-                    <p className="text-slate-400">Your tracked Solana tokens and search results</p>
+                    {tokenData ? (
+                        <>
+                            <h1 className="text-3xl font-bold text-white mb-2">Token Information</h1>
+                            <p className="text-slate-400">Search results for {tokenData.name} ({tokenData.symbol})</p>
+                        </>
+                    ) : (
+                        <>
+                            <h1 className="text-3xl font-bold text-white mb-2">Token Search</h1>
+                            <p className="text-slate-400">Search for Solana tokens by contract address</p>
+                        </>
+                    )}
                 </div>
 
                 {/* Instructions when no token is selected */}
@@ -180,10 +189,10 @@ function WatchlistContent() {
                             </svg>
                             <h3 className="text-lg font-semibold text-slate-200 mb-2">Search for Tokens</h3>
                             <p className="text-slate-400 mb-4">
-                                Use the search bar in the sidebar to find and view Solana token information.
+                                Use the search bar in the sidebar to find and view detailed Solana token information including prices, market cap, trading pairs, and more.
                             </p>
                             <p className="text-slate-500 text-sm">
-                                Enter a token contract address to get started.
+                                Enter a valid Solana token contract address to get started.
                             </p>
                         </div>
                     </div>
@@ -279,8 +288,24 @@ function WatchlistContent() {
                                             <div className="text-white font-medium">{tokenData.symbol}</div>
                                         </div>
                                         <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Price</div>
-                                            <div className="text-white font-medium">${formatPrice(tokenData.price)}</div>
+                                            <div className="text-sm text-slate-400 mb-1">
+                                                Price
+                                                {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && !isLoadingPairs && (
+                                                    <span className="ml-1 text-xs">
+                                                        ({[...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0].exchangeName})
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-white font-medium">
+                                                {isLoadingPairs ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                                        <span>Loading...</span>
+                                                    </div>
+                                                ) : (
+                                                    `$${formatPrice(getCurrentPrice())}`
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="bg-slate-700 rounded-lg p-4">
                                             <div className="text-sm text-slate-400 mb-1">Market Cap</div>

@@ -10,6 +10,21 @@ import toast from 'react-hot-toast';
 import SearchModal from './SearchModal';
 import { TokenData } from '../services/api';
 
+interface SearchHistoryItem extends TokenData {
+    search_timestamp: number;
+    metadata?: {
+        logo?: string;
+        decimals?: number;
+        totalSupplyFormatted?: string;
+    };
+    pairs?: {
+        topPrice?: number;
+        liquidityUsd?: number;
+        volume24h?: number;
+    };
+    isLoading?: boolean;
+}
+
 interface DashboardLayoutProps {
     children: ReactNode;
 }
@@ -20,7 +35,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const router = useRouter();
     const pathname = usePathname();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [searchHistory, setSearchHistory] = useState<TokenData[]>([]);
+    const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
     useEffect(() => {
@@ -28,7 +43,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         const savedHistory = localStorage.getItem('token_search_history');
         if (savedHistory) {
             try {
-                setSearchHistory(JSON.parse(savedHistory));
+                const parsedHistory = JSON.parse(savedHistory);
+                // Ensure backward compatibility - add missing fields
+                const historyWithTimestamps = parsedHistory.map((item: any) => ({
+                    ...item,
+                    search_timestamp: item.search_timestamp || Date.now(),
+                    metadata: item.metadata || (item.logo ? { logo: item.logo } : undefined),
+                    pairs: item.pairs || undefined,
+                    isLoading: false
+                }));
+                setSearchHistory(historyWithTimestamps);
             } catch (error) {
                 console.error('Error loading search history:', error);
             }
@@ -50,7 +74,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return `${address.slice(0, 4)}...${address.slice(-4)}`;
     };
 
-    const handleUpdateSearchHistory = (newHistory: TokenData[]) => {
+    const handleUpdateSearchHistory = (newHistory: SearchHistoryItem[]) => {
         setSearchHistory(newHistory);
         localStorage.setItem('token_search_history', JSON.stringify(newHistory));
     };
