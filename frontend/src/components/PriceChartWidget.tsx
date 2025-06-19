@@ -48,7 +48,7 @@ export const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ tokenAddress
                     backgroundColor: '#071321',
                     gridColor: '#0d2035',
                     textColor: '#68738D',
-                    candleUpColor: '#4CE666',
+                    candleUpColor: '#109c84',
                     candleDownColor: '#E64C4C',
                     hideLeftToolbar: false,
                     hideTopToolbar: false,

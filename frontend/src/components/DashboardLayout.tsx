@@ -168,6 +168,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             </button>
                         </div>
 
+                        {/* Padding above Search */}
+                        <div className="py-4"></div>
+
                         {/* Search Button */}
                         {!sidebarCollapsed && (
                             <div className="px-4 mb-4 flex-shrink-0">
@@ -212,9 +215,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             })}
                         </nav>
 
-                        {/* Followed Tokens Section */}
+                        {/* Padding after Settings */}
+                        <div className="py-4"></div>
+
+                        {/* Followed Tokens Section - Takes remaining space */}
                         {!sidebarCollapsed && (
-                            <div className="px-4 py-4 border-t border-gray-800/30 flex-shrink-0">
+                            <div className="px-4 py-4 border-t border-gray-800/30 flex-1">
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                                     Followed Tokens
                                 </h3>
@@ -227,8 +233,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             </div>
                         )}
 
-                        {/* Disconnect Button */}
-                        <div className="p-4 border-t border-gray-800/30 flex-shrink-0">
+                        {/* Spacer for collapsed sidebar */}
+                        {sidebarCollapsed && (
+                            <div className="flex-1"></div>
+                        )}
+
+                        {/* Disconnect Button - Always at bottom */}
+                        <div className="p-4 border-t border-gray-800/30 flex-shrink-0 mt-auto">
                             <button
                                 onClick={handleSignOut}
                                 className={`flex items-center space-x-3 w-full px-3 py-2.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 rounded-lg transition-colors text-sm ${sidebarCollapsed ? 'justify-center' : ''
