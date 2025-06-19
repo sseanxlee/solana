@@ -10,12 +10,16 @@ export const metadata: Metadata = {
     description: 'Advanced real-time analytics and alerts for Solana tokens',
     keywords: ['Solana', 'Token', 'Analytics', 'Trading', 'DeFi', 'Professional'],
     authors: [{ name: 'Stride' }],
-    viewport: 'width=device-width, initial-scale=1',
     icons: {
         icon: '/favicon.ico',
         shortcut: '/favicon.ico',
         apple: '/favicon.ico',
     },
+};
+
+export const viewport = {
+    width: 'device-width',
+    initialScale: 1,
 };
 
 export default function RootLayout({

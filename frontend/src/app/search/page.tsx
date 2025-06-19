@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { apiService, TokenPairsResponse, TokenMetadata } from '@/services/api';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuth } from '../../contexts/AuthContext';
+import { apiService, TokenPairsResponse, TokenMetadata } from '../../services/api';
 import { toast } from 'react-hot-toast';
-import { MagnifyingGlassIcon, ClockIcon, TrashIcon, CurrencyDollarIcon } from '@heroicons/react/24/outline';
-import DashboardLayout from '@/components/DashboardLayout';
+import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
+import DashboardLayout from '../../components/DashboardLayout';
 
 interface TokenData {
     address: string;
@@ -18,17 +18,16 @@ interface TokenData {
     logo?: string;
 }
 
-export default function TokenSearch() {
+function WatchlistContent() {
     const { isAuthenticated, user, isLoading: authLoading, signOut } = useAuth();
     const router = useRouter();
-    const [searchQuery, setSearchQuery] = useState('');
+    const searchParams = useSearchParams();
     const [tokenData, setTokenData] = useState<TokenData | null>(null);
     const [tokenPairs, setTokenPairs] = useState<TokenPairsResponse | null>(null);
     const [tokenMetadata, setTokenMetadata] = useState<TokenMetadata | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
+    const [isLoadingToken, setIsLoadingToken] = useState(false);
     const [isLoadingPairs, setIsLoadingPairs] = useState(false);
     const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
-    const [searchHistory, setSearchHistory] = useState<TokenData[]>([]);
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
@@ -36,16 +35,39 @@ export default function TokenSearch() {
             return;
         }
 
-        // Load search history from localStorage
-        const savedHistory = localStorage.getItem('token_search_history');
-        if (savedHistory) {
-            try {
-                setSearchHistory(JSON.parse(savedHistory));
-            } catch (error) {
-                console.error('Error loading search history:', error);
-            }
+        // Check for token parameter in URL
+        const tokenAddress = searchParams.get('token');
+        if (tokenAddress) {
+            loadTokenData(tokenAddress);
         }
-    }, [isAuthenticated, authLoading, router]);
+    }, [isAuthenticated, authLoading, router, searchParams]);
+
+    const loadTokenData = async (tokenAddress: string) => {
+        try {
+            setIsLoadingToken(true);
+            setTokenData(null);
+            setTokenPairs(null);
+            setTokenMetadata(null);
+
+            const response = await apiService.searchTokens(tokenAddress);
+
+            if (response.success && response.data && response.data.length > 0) {
+                const tokenResult = response.data[0];
+                setTokenData(tokenResult);
+
+                // Fetch pairs and metadata data in parallel
+                fetchTokenPairs(tokenAddress);
+                fetchTokenMetadata(tokenAddress);
+            } else {
+                toast.error('Token not found');
+            }
+        } catch (error: any) {
+            console.error('Error loading token:', error);
+            toast.error(error.error || 'Failed to fetch token data');
+        } finally {
+            setIsLoadingToken(false);
+        }
+    };
 
     const fetchTokenPairs = async (tokenAddress: string) => {
         try {
@@ -105,76 +127,6 @@ export default function TokenSearch() {
         return 0;
     };
 
-    const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!searchQuery.trim()) {
-            toast.error('Please enter a token contract address');
-            return;
-        }
-
-        // Basic Solana address validation
-        if (searchQuery.length < 32 || searchQuery.length > 44) {
-            toast.error('Invalid Solana token address format (must be 32-44 characters)');
-            return;
-        }
-
-        // Check for valid base58 characters
-        const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
-        if (!base58Regex.test(searchQuery)) {
-            toast.error('Invalid characters in token address (must be base58)');
-            return;
-        }
-
-        try {
-            setIsSearching(true);
-            setTokenData(null);
-            setTokenPairs(null);
-            setTokenMetadata(null);
-
-            const response = await apiService.searchTokens(searchQuery.trim());
-
-            if (response.success && response.data && response.data.length > 0) {
-                const tokenResult = response.data[0];
-                setTokenData(tokenResult);
-
-                // Add to search history
-                const newHistory = [tokenResult, ...searchHistory.filter(item => item.address !== tokenResult.address)].slice(0, 10);
-                setSearchHistory(newHistory);
-                localStorage.setItem('token_search_history', JSON.stringify(newHistory));
-
-                toast.success('Token data loaded successfully!');
-
-                // Fetch pairs and metadata data in parallel
-                fetchTokenPairs(tokenResult.address);
-                fetchTokenMetadata(tokenResult.address);
-            } else {
-                toast.error('Token not found or invalid address');
-            }
-        } catch (error: any) {
-            console.error('Search error:', error);
-            toast.error(error.error || 'Failed to fetch token data');
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
-    const handleHistorySelect = (token: TokenData) => {
-        setSearchQuery(token.address);
-        setTokenData(token);
-        setTokenPairs(null);
-        setTokenMetadata(null);
-        // Fetch pairs and metadata for historical selection
-        fetchTokenPairs(token.address);
-        fetchTokenMetadata(token.address);
-    };
-
-    const clearHistory = () => {
-        setSearchHistory([]);
-        localStorage.removeItem('token_search_history');
-        toast.success('Search history cleared');
-    };
-
     const formatPrice = (price: number) => {
         if (!price || typeof price !== 'number' || isNaN(price)) {
             return '0.0000';
@@ -215,49 +167,37 @@ export default function TokenSearch() {
         <DashboardLayout>
             <div className="space-y-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">Token Search</h1>
-                    <p className="text-slate-400">Search for Solana tokens by contract address</p>
+                    <h1 className="text-3xl font-bold text-white mb-2">Watchlist</h1>
+                    <p className="text-slate-400">Your tracked Solana tokens and search results</p>
                 </div>
 
-                {/* Search Form */}
-                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                    <form onSubmit={handleSearch} className="space-y-4">
-                        <div>
-                            <label htmlFor="contractAddress" className="block text-sm font-medium text-slate-300 mb-2">
-                                Contract Address
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="contractAddress"
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Enter Solana token contract address (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)"
-                                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
-                                    disabled={isSearching}
-                                />
-                                <MagnifyingGlassIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-                            </div>
+                {/* Instructions when no token is selected */}
+                {!tokenData && !isLoadingToken && (
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-8">
+                        <div className="text-center">
+                            <svg className="w-16 h-16 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <h3 className="text-lg font-semibold text-slate-200 mb-2">Search for Tokens</h3>
+                            <p className="text-slate-400 mb-4">
+                                Use the search bar in the sidebar to find and view Solana token information.
+                            </p>
+                            <p className="text-slate-500 text-sm">
+                                Enter a token contract address to get started.
+                            </p>
                         </div>
-                        <button
-                            type="submit"
-                            disabled={isSearching}
-                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                        >
-                            {isSearching ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                    <span>Searching...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <MagnifyingGlassIcon className="h-5 w-5" />
-                                    <span>Search Token</span>
-                                </>
-                            )}
-                        </button>
-                    </form>
-                </div>
+                    </div>
+                )}
+
+                {/* Loading State */}
+                {isLoadingToken && (
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-8">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                            <p className="text-slate-400">Loading token data...</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Token Results */}
                 {tokenData && (
@@ -440,44 +380,35 @@ export default function TokenSearch() {
                         </div>
                     </div>
                 )}
-
-                {/* Search History */}
-                {searchHistory.length > 0 && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold text-white flex items-center space-x-2">
-                                <ClockIcon className="h-5 w-5" />
-                                <span>Search History</span>
-                            </h2>
-                            <button
-                                onClick={clearHistory}
-                                className="text-slate-400 hover:text-red-400 transition-colors"
-                            >
-                                <TrashIcon className="h-5 w-5" />
-                            </button>
-                        </div>
-                        <div className="space-y-2">
-                            {searchHistory.map((token, index) => (
-                                <div
-                                    key={index}
-                                    onClick={() => handleHistorySelect(token)}
-                                    className="bg-slate-700 hover:bg-slate-600 rounded-lg p-3 cursor-pointer transition-colors"
-                                >
-                                    <div className="flex items-center space-x-3">
-                                        <div className="flex-1">
-                                            <div className="text-white font-medium">{token.name} ({token.symbol})</div>
-                                            <div className="text-slate-400 text-sm font-mono">{token.address}</div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-white font-medium">${formatPrice(token.price)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
         </DashboardLayout>
+    );
+}
+
+// Loading fallback component
+function WatchlistFallback() {
+    return (
+        <DashboardLayout>
+            <div className="space-y-8">
+                <div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Watchlist</h1>
+                    <p className="text-slate-400">Loading...</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-8">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                        <p className="text-slate-400">Loading page...</p>
+                    </div>
+                </div>
+            </div>
+        </DashboardLayout>
+    );
+}
+
+export default function WatchlistPage() {
+    return (
+        <Suspense fallback={<WatchlistFallback />}>
+            <WatchlistContent />
+        </Suspense>
     );
 } 

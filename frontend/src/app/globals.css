@@ -116,10 +116,26 @@
 /* Professional wallet button styles */
 .wallet-adapter-button {
     @apply bg-primary-600 hover:bg-primary-500 border border-primary-500/20 !important;
+    font-size: 9px !important;
+    padding: 4px 10px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-width: 130px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 .wallet-adapter-button-trigger {
     @apply bg-primary-600 hover:bg-primary-500 border border-primary-500/20 !important;
+    font-size: 9px !important;
+    padding: 4px 10px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-width: 130px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 /* Professional animations */
@@ -139,10 +155,4 @@
     animation: fadeIn 0.5s ease-out;
 }
 
-/* Grid pattern background */
-.grid-pattern {
-    background-image:
-        linear-gradient(rgba(71, 85, 105, 0.1) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(71, 85, 105, 0.1) 1px, transparent 1px);
-    background-size: 20px 20px;
-}
+/* Grid pattern background - removed */
