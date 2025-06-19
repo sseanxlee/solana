@@ -2,7 +2,12 @@ import axios, { AxiosResponse } from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
+// Moralis API Configuration (Premium Feature)
+const MORALIS_API_KEY = process.env.NEXT_PUBLIC_MORALIS_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjEzZTBhZmU0LTFjZjktNGI2MC1iMTQ5LTkxYjhmMjc0ZjQwYyIsIm9yZ0lkIjoiNDU0MTk2IiwidXNlcklkIjoiNDY3MzA4IiwidHlwZUlkIjoiN2JmMGFkMmEtNTkyMS00ZGNiLWIzNzYtZGVlODBmMDQyOTRjIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTAwNTUyMDcsImV4cCI6NDkwNTgxNTIwN30.lHFaJeZjoWCbGtOt7qLY9IHaGYlUIFw8k44UhymkElk';
+const USE_MORALIS_SEARCH = process.env.NEXT_PUBLIC_USE_MORALIS_SEARCH === 'true' || false;
+
 console.log('API Service initialized with base URL:', API_BASE_URL);
+console.log('Moralis integration status:', USE_MORALIS_SEARCH ? 'ENABLED' : 'DISABLED');
 
 interface ApiResponse<T = any> {
     success: boolean;
@@ -230,6 +235,62 @@ export interface TokenPairStats {
     };
 }
 
+// Moralis API Interfaces (Premium Feature)
+interface MoralisTokenResult {
+    tokenAddress: string;
+    chainId: string;
+    name: string;
+    symbol: string;
+    blockNumber: number;
+    blockTimestamp: number;
+    usdPrice: number;
+    marketCap: number;
+    experiencedNetBuyers?: {
+        oneDay: number;
+        oneWeek: number;
+    };
+    netVolumeUsd?: {
+        oneDay: number;
+    };
+    liquidityChangeUSD?: {
+        oneDay: number;
+    };
+    usdPricePercentChange?: {
+        oneDay: number;
+    };
+    volumeUsd?: {
+        oneDay: number;
+    };
+    securityScore?: number;
+    logo?: string;
+    isVerifiedContract?: boolean;
+}
+
+interface MoralisSearchResponse {
+    total: number;
+    result: MoralisTokenResult[];
+}
+
+interface MoralisSearchParams {
+    query: string;
+    chains?: string;
+    limit?: number;
+    isVerifiedContract?: boolean;
+    sortBy?: 'volume1hDesc' | 'volume24hDesc' | 'liquidityDesc' | 'marketCapDesc';
+    boostVerifiedContracts?: boolean;
+}
+
+// Standard token data interface
+export interface TokenData {
+    address: string;
+    name: string;
+    symbol: string;
+    price: number;
+    market_cap?: number;
+    last_updated?: string;
+    logo?: string;
+}
+
 class ApiService {
     private authToken: string | null = null;
 
@@ -362,15 +423,48 @@ class ApiService {
         return this.request('GET', `/tokens/${tokenAddress}`);
     }
 
-    async searchTokens(query: string): Promise<ApiResponse<{
-        address: string;
-        name: string;
-        symbol: string;
-        price: number;
-        market_cap?: number;
-        last_updated?: string;
-    }[]>> {
-        return this.request('GET', `/tokens/search?query=${encodeURIComponent(query)}`);
+    async searchTokens(query: string): Promise<ApiResponse<TokenData[]>> {
+        if (USE_MORALIS_SEARCH) {
+            console.log('Using Moralis API for token search');
+            return this.searchTokensMoralis({
+                query,
+                chains: 'solana',
+                limit: 10,
+                isVerifiedContract: true,
+                sortBy: 'volume24hDesc',
+                boostVerifiedContracts: true
+            });
+        } else {
+            console.log('Using legacy API for token search');
+            // Use the existing legacy API
+            const response = await this.request<{
+                address: string;
+                name: string;
+                symbol: string;
+                price: number;
+                market_cap?: number;
+                last_updated?: string;
+            }[]>('GET', `/tokens/search?query=${encodeURIComponent(query)}`);
+
+            if (response.success && response.data) {
+                const mappedData: TokenData[] = response.data.map(token => ({
+                    address: token.address,
+                    name: token.name,
+                    symbol: token.symbol,
+                    price: token.price,
+                    market_cap: token.market_cap,
+                    last_updated: token.last_updated,
+                    logo: undefined // Legacy API doesn't provide logos
+                }));
+
+                return {
+                    ...response,
+                    data: mappedData
+                };
+            }
+
+            return response as ApiResponse<TokenData[]>;
+        }
     }
 
     async getTokenPairs(tokenAddress: string): Promise<ApiResponse<TokenPairsResponse>> {
@@ -415,6 +509,64 @@ class ApiService {
     }>> {
         return this.request('POST', '/admin/force-check', { tokenAddress });
     }
+
+    // Moralis API Methods (Premium Feature)
+    private mapMoralisToTokenData(moralisToken: MoralisTokenResult): TokenData {
+        return {
+            address: moralisToken.tokenAddress,
+            name: moralisToken.name,
+            symbol: moralisToken.symbol,
+            price: moralisToken.usdPrice || 0,
+            market_cap: moralisToken.marketCap,
+            last_updated: new Date(moralisToken.blockTimestamp * 1000).toISOString(),
+            logo: moralisToken.logo
+        };
+    }
+
+    private async searchTokensMoralis(params: MoralisSearchParams): Promise<ApiResponse<TokenData[]>> {
+        try {
+            const searchParams = new URLSearchParams({
+                query: params.query,
+                chains: params.chains || 'solana',
+                limit: (params.limit || 10).toString(),
+                ...(params.isVerifiedContract !== undefined && { isVerifiedContract: params.isVerifiedContract.toString() }),
+                ...(params.sortBy && { sortBy: params.sortBy }),
+                ...(params.boostVerifiedContracts !== undefined && { boostVerifiedContracts: params.boostVerifiedContracts.toString() })
+            });
+
+            const url = `https://deep-index.moralis.io/api/v2.2/tokens/search?${searchParams.toString()}`;
+
+            console.log('Moralis API: Searching tokens with query:', params.query);
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'accept': 'application/json',
+                    'X-API-Key': MORALIS_API_KEY
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Moralis API error: ${response.status} ${response.statusText}`);
+            }
+
+            const moralisResponse: MoralisSearchResponse = await response.json();
+            console.log('Moralis API: Search results:', moralisResponse);
+
+            const mappedTokens = moralisResponse.result.map(token => this.mapMoralisToTokenData(token));
+
+            return {
+                success: true,
+                data: mappedTokens
+            };
+        } catch (error: any) {
+            console.error('Moralis API: Search error:', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to search tokens with Moralis API'
+            };
+        }
+    }
 }
 
 export const apiService = new ApiService();
@@ -425,5 +577,8 @@ export type {
     ApiResponse,
     TokenPair,
     TokenPairData,
-    TokenPairsResponse
+    TokenPairsResponse,
+    MoralisTokenResult,
+    MoralisSearchResponse,
+    MoralisSearchParams
 }; 
