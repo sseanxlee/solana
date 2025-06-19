@@ -7,6 +7,7 @@ import { apiService, TokenPairsResponse, TokenMetadata } from '../../services/ap
 import { toast } from 'react-hot-toast';
 import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import DashboardLayout from '../../components/DashboardLayout';
+import { PriceChartWidget } from '../../components/PriceChartWidget';
 
 interface TokenData {
     address: string;
@@ -169,8 +170,7 @@ function WatchlistContent() {
                 <div>
                     {tokenData ? (
                         <>
-                            <h1 className="text-3xl font-bold text-white mb-2">Token Information</h1>
-                            <p className="text-slate-400">Search results for {tokenData.name} ({tokenData.symbol})</p>
+                            <h1 className="text-base font-normal text-white mb-2">Token Information</h1>
                         </>
                     ) : (
                         <>
@@ -208,198 +208,192 @@ function WatchlistContent() {
                     </div>
                 )}
 
-                {/* Token Results */}
+                {/* Side-by-side Layout: Price Chart (Left) + Token Info (Right) */}
                 {tokenData && (
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-                        <h2 className="text-xl font-semibold text-white mb-4">Token Information</h2>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                            {/* Left side - External Links */}
-                            <div className="lg:col-span-1">
-                                <div className="space-y-3">
-                                    <h3 className="text-sm font-medium text-slate-300 mb-3">External Tools</h3>
-
-                                    {/* Solscan Link */}
-                                    <a
-                                        href={`https://solscan.io/token/${tokenData.address}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
-                                    >
-                                        <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                                            <span className="text-white text-xs font-bold">S</span>
-                                        </div>
-                                        <span className="text-white text-sm">View on Solscan</span>
-                                    </a>
-
-                                    {/* Single Axiom Link */}
-                                    {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
-                                        <a
-                                            href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center space-x-2 bg-slate-700 hover:bg-slate-600 rounded-lg p-3 transition-colors"
-                                        >
-                                            <div className="w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                                                <span className="text-white text-xs font-bold">A</span>
-                                            </div>
-                                            <span className="text-white text-sm">View in Axiom - Token/SOL</span>
-                                        </a>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Right side - Token Details and Pairs */}
-                            <div className="lg:col-span-3">
-                                {/* Token Logo and Basic Info */}
-                                <div className="flex items-start space-x-6 mb-6">
-                                    {/* Logo */}
-                                    <div className="flex-shrink-0">
+                    <div className="grid grid-cols-4 gap-6" style={{ height: '80vh' }}>
+                        {/* Price Chart Widget - Left Side (3/4 width) */}
+                        <div className="col-span-3 h-full">
+                            <PriceChartWidget tokenAddress={tokenData.address} height="80vh" />
+                        </div>
+                        {/* Token Information Panel - Right Side (1/4 width) */}
+                        <div className="col-span-1 h-full">
+                            <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 h-full flex flex-col">
+                                {/* Token Header with Logo, Name and Social Links */}
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center space-x-4">
+                                        {/* Token Logo */}
                                         {isLoadingMetadata ? (
-                                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
-                                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center">
+                                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
                                             </div>
                                         ) : tokenMetadata?.logo ? (
                                             <img
                                                 src={tokenMetadata.logo}
                                                 alt={tokenData.name}
-                                                className="w-16 h-16 rounded-full object-cover bg-slate-700"
+                                                className="w-12 h-12 rounded-full object-cover bg-slate-700"
                                                 onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
                                                 }}
                                             />
                                         ) : (
-                                            <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center">
+                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center">
                                                 <span className="text-white text-lg font-bold">
                                                     {tokenData.symbol.charAt(0)}
                                                 </span>
                                             </div>
                                         )}
+                                        {/* Token Name and Symbol */}
+                                        <div>
+                                            <h2 className="text-xl font-bold text-white">{tokenData.name}</h2>
+                                            <p className="text-slate-400">${tokenData.symbol}</p>
+                                        </div>
                                     </div>
-
-                                    {/* Basic Token Info */}
-                                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Name</div>
-                                            <div className="text-white font-medium">{tokenData.name}</div>
-                                        </div>
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Symbol</div>
-                                            <div className="text-white font-medium">{tokenData.symbol}</div>
-                                        </div>
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">
-                                                Price
-                                                {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && !isLoadingPairs && (
-                                                    <span className="ml-1 text-xs">
-                                                        ({[...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0].exchangeName})
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-white font-medium">
-                                                {isLoadingPairs ? (
-                                                    <div className="flex items-center space-x-2">
-                                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                                                        <span>Loading...</span>
-                                                    </div>
-                                                ) : (
-                                                    `$${formatPrice(getCurrentPrice())}`
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Market Cap</div>
-                                            <div className="text-white font-medium">{formatMarketCap(calculateMarketCap())}</div>
-                                        </div>
+                                    {/* Social Links */}
+                                    <div className="flex items-center space-x-3">
+                                        <a
+                                            href={`https://solscan.io/token/${tokenData.address}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        >
+                                            Website
+                                        </a>
+                                        <a
+                                            href={`https://solscan.io/token/${tokenData.address}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        >
+                                            Twitter
+                                        </a>
+                                        {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
+                                            <a
+                                                href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                            >
+                                                Telegram
+                                            </a>
+                                        )}
                                     </div>
                                 </div>
-
-                                {/* Supply Info */}
-                                {tokenMetadata && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Total Supply</div>
-                                            <div className="text-white font-medium">{parseFloat(tokenMetadata.totalSupplyFormatted).toLocaleString()} {tokenData.symbol}</div>
-                                        </div>
-                                        <div className="bg-slate-700 rounded-lg p-4">
-                                            <div className="text-sm text-slate-400 mb-1">Decimals</div>
-                                            <div className="text-white font-medium">{tokenMetadata.decimals}</div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Contract Address */}
-                                <div className="bg-slate-700 rounded-lg p-4 mb-6">
-                                    <div className="text-sm text-slate-400 mb-1">Contract Address</div>
-                                    <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
-                                </div>
-
-                                {/* Trading Pairs - More Compact */}
-                                <div>
-                                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center space-x-2">
-                                        <CurrencyDollarIcon className="h-4 w-4" />
-                                        <span>Trading Pairs</span>
-                                    </h3>
-
-                                    {isLoadingPairs ? (
-                                        <div className="flex items-center justify-center py-6">
-                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                                            <span className="ml-2 text-slate-400 text-sm">Loading pairs...</span>
-                                        </div>
-                                    ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {tokenPairs.pairs
-                                                .sort((a, b) => b.liquidityUsd - a.liquidityUsd)
-                                                .slice(0, 2)
-                                                .map((pair, index) => (
-                                                    <div key={index} className="bg-slate-700 rounded-lg p-3">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                            <div className="flex items-center space-x-2">
-                                                                {pair.exchangeLogo && (
-                                                                    <img
-                                                                        src={pair.exchangeLogo}
-                                                                        alt={pair.exchangeName}
-                                                                        className="w-4 h-4 rounded-full"
-                                                                    />
-                                                                )}
-                                                                <div>
-                                                                    <div className="text-white font-medium text-sm">{pair.pairLabel}</div>
-                                                                    <div className="text-slate-400 text-xs">{pair.exchangeName}</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <div className="text-white font-medium text-sm">${formatPrice(pair.usdPrice)}</div>
-                                                                <div className={`text-xs ${pair.usdPrice24hrPercentChange && pair.usdPrice24hrPercentChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                                    {pair.usdPrice24hrPercentChange !== null ?
-                                                                        `${pair.usdPrice24hrPercentChange >= 0 ? '+' : ''}${pair.usdPrice24hrPercentChange.toFixed(2)}%` :
-                                                                        'N/A'
-                                                                    }
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                                            <div>
-                                                                <span className="text-slate-400">Liquidity: </span>
-                                                                <span className="text-white">{formatMarketCap(pair.liquidityUsd)}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-slate-400">Pair: </span>
-                                                                <span className="text-white font-mono">{pair.pairAddress.slice(0, 8)}...{pair.pairAddress.slice(-4)}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            {tokenPairs.pairs.length > 2 && (
-                                                <div className="text-center text-slate-400 text-xs">
-                                                    Showing top 2 highest liquidity pairs out of {tokenPairs.pairs.length} available
+                                {/* Price Information */}
+                                <div className="grid grid-cols-2 gap-6 mb-6">
+                                    <div>
+                                        <div className="text-slate-400 text-sm mb-1">PRICE USD</div>
+                                        <div className="text-white text-2xl font-bold">
+                                            {isLoadingPairs ? (
+                                                <div className="flex items-center space-x-2">
+                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                                                    <span className="text-lg">Loading...</span>
                                                 </div>
+                                            ) : (
+                                                `$${formatPrice(getCurrentPrice())}`
                                             )}
                                         </div>
-                                    ) : (
-                                        <div className="text-center py-4 text-slate-400 text-sm">
-                                            No trading pairs found for this token
+                                    </div>
+                                    <div>
+                                        <div className="text-slate-400 text-sm mb-1">PRICE SOL</div>
+                                        <div className="text-white text-2xl font-bold">
+                                            {isLoadingPairs ? (
+                                                "Loading..."
+                                            ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
+                                                `${(getCurrentPrice() / 220).toFixed(6)} SOL`
+                                            ) : (
+                                                "N/A"
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
+                                </div>
+                                {/* Stats Grid */}
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">LIQUIDITY</div>
+                                        <div className="text-white font-medium">
+                                            {isLoadingPairs ? "..." : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ?
+                                                formatMarketCap([...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd)[0].liquidityUsd) :
+                                                "N/A"
+                                            }
+                                        </div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">FDV</div>
+                                        <div className="text-white font-medium">{formatMarketCap(calculateMarketCap())}</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">MKT CAP</div>
+                                        <div className="text-white font-medium">{formatMarketCap(calculateMarketCap())}</div>
+                                    </div>
+                                </div>
+                                {/* Time-based Performance */}
+                                <div className="grid grid-cols-4 gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">5M</div>
+                                        <div className="text-green-400 font-medium">0.05%</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">1H</div>
+                                        <div className="text-green-400 font-medium">1.67%</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">6H</div>
+                                        <div className="text-green-400 font-medium">4.24%</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">24H</div>
+                                        <div className="text-green-400 font-medium">30.61%</div>
+                                    </div>
+                                </div>
+                                {/* Transaction Stats */}
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">TXNS</div>
+                                        <div className="text-white font-medium">19,643</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">BUYS</div>
+                                        <div className="text-green-400 font-medium">10,376</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">SELLS</div>
+                                        <div className="text-red-400 font-medium">9,267</div>
+                                    </div>
+                                </div>
+                                {/* Volume Stats */}
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">VOLUME</div>
+                                        <div className="text-white font-medium">$19.2M</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">BUY VOL</div>
+                                        <div className="text-green-400 font-medium">$9.8M</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">SELL VOL</div>
+                                        <div className="text-red-400 font-medium">$9.4M</div>
+                                    </div>
+                                </div>
+                                {/* Makers Stats */}
+                                <div className="grid grid-cols-3 gap-4 mb-6">
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">MAKERS</div>
+                                        <div className="text-white font-medium">4,015</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">BUYERS</div>
+                                        <div className="text-green-400 font-medium">2,735</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-slate-400 text-xs mb-1">SELLERS</div>
+                                        <div className="text-red-400 font-medium">2,590</div>
+                                    </div>
+                                </div>
+                                {/* Contract Address */}
+                                <div className="bg-slate-700 rounded-lg p-4">
+                                    <div className="text-slate-400 text-xs mb-1">CONTRACT ADDRESS</div>
+                                    <div className="text-white font-mono text-sm break-all">{tokenData.address}</div>
                                 </div>
                             </div>
                         </div>

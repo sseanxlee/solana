@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans';
 import './globals.css';
 import { WalletContextProvider } from '../contexts/WalletContext';
 import { AuthProvider } from '../contexts/AuthContext';
+import { ChartProvider } from '../contexts/ChartContext';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
@@ -37,34 +38,36 @@ export default function RootLayout({
             <body className={GeistSans.className}>
                 <WalletContextProvider>
                     <AuthProvider>
-                        <div className="min-h-screen bg-gray-950">
-                            {children}
-                        </div>
-                        <Toaster
-                            position="top-right"
-                            toastOptions={{
-                                duration: 4000,
-                                style: {
-                                    background: '#1f2937',
-                                    color: '#f9fafb',
-                                    border: '1px solid #374151',
-                                },
-                                success: {
-                                    duration: 3000,
-                                    iconTheme: {
-                                        primary: '#059669',
-                                        secondary: '#f9fafb',
+                        <ChartProvider>
+                            <div className="min-h-screen bg-gray-950">
+                                {children}
+                            </div>
+                            <Toaster
+                                position="top-right"
+                                toastOptions={{
+                                    duration: 4000,
+                                    style: {
+                                        background: '#1f2937',
+                                        color: '#f9fafb',
+                                        border: '1px solid #374151',
                                     },
-                                },
-                                error: {
-                                    duration: 5000,
-                                    iconTheme: {
-                                        primary: '#dc2626',
-                                        secondary: '#f9fafb',
+                                    success: {
+                                        duration: 3000,
+                                        iconTheme: {
+                                            primary: '#059669',
+                                            secondary: '#f9fafb',
+                                        },
                                     },
-                                },
-                            }}
-                        />
+                                    error: {
+                                        duration: 5000,
+                                        iconTheme: {
+                                            primary: '#dc2626',
+                                            secondary: '#f9fafb',
+                                        },
+                                    },
+                                }}
+                            />
+                        </ChartProvider>
                     </AuthProvider>
                 </WalletContextProvider>
             </body>
