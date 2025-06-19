@@ -8,6 +8,7 @@ interface ChartSettings {
 
 interface ChartContextType {
     settings: ChartSettings;
+    isLoaded: boolean;
     updateShowHoldersChart: (show: boolean) => void;
 }
 
@@ -23,6 +24,7 @@ interface ChartProviderProps {
 
 export const ChartProvider: React.FC<ChartProviderProps> = ({ children }) => {
     const [settings, setSettings] = useState<ChartSettings>(defaultSettings);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     // Load settings from localStorage on mount
     useEffect(() => {
@@ -34,17 +36,22 @@ export const ChartProvider: React.FC<ChartProviderProps> = ({ children }) => {
             }
         } catch (error) {
             console.error('Error loading chart settings:', error);
+        } finally {
+            // Mark as loaded regardless of success/failure
+            setIsLoaded(true);
         }
     }, []);
 
-    // Save settings to localStorage whenever they change
+    // Save settings to localStorage whenever they change (but only after initial load)
     useEffect(() => {
+        if (!isLoaded) return; // Don't save during initial load
+
         try {
             localStorage.setItem('chart_settings', JSON.stringify(settings));
         } catch (error) {
             console.error('Error saving chart settings:', error);
         }
-    }, [settings]);
+    }, [settings, isLoaded]);
 
     const updateShowHoldersChart = (show: boolean) => {
         setSettings(prev => ({
@@ -56,6 +63,7 @@ export const ChartProvider: React.FC<ChartProviderProps> = ({ children }) => {
     return (
         <ChartContext.Provider value={{
             settings,
+            isLoaded,
             updateShowHoldersChart
         }}>
             {children}
