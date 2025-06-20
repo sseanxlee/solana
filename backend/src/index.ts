@@ -8,16 +8,16 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import alertRoutes from './routes/alerts';
 import tokenRoutes from './routes/tokens';
-import { MonitoringService } from './services/monitoringService';
+import { TelegramBotService } from './services/telegramBotService';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.API_PORT || 3002;
+const PORT = process.env.API_PORT || 3001;
 
-// Initialize monitoring service
-const monitoringService = new MonitoringService();
+// Initialize Telegram bot service (singleton)
+const telegramBotService = TelegramBotService.getInstance();
 
 // Security middleware
 app.use(helmet());
@@ -79,41 +79,21 @@ app.use('/api/profile', (req, res, next) => {
 
 // Token routes are now handled by tokenRoutes
 
-// Admin routes (for monitoring stats)
+// Admin routes (simple status check)
 app.get('/api/admin/stats', async (req, res) => {
     try {
-        const stats = await monitoringService.getMonitoringStats();
         res.json({
             success: true,
-            data: stats
+            data: {
+                telegramBotRunning: telegramBotService.isRunningBot(),
+                message: "Monitoring service disabled - basic bot only"
+            }
         });
     } catch (error) {
         console.error('Error fetching admin stats:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to fetch monitoring statistics'
-        });
-    }
-});
-
-// Force check endpoint (for testing)
-app.post('/api/admin/force-check', async (req, res) => {
-    try {
-        const { tokenAddress } = req.body;
-        const result = await monitoringService.forceCheck(tokenAddress);
-
-        res.json({
-            success: result.success,
-            message: result.message,
-            data: {
-                alertsChecked: result.alertsChecked
-            }
-        });
-    } catch (error) {
-        console.error('Error during force check:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to perform force check'
+            error: 'Failed to fetch status'
         });
     }
 });
@@ -142,7 +122,7 @@ app.use('*', (req, res) => {
 const gracefulShutdown = (signal: string) => {
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
-    monitoringService.stop();
+    telegramBotService.stop();
 
     process.exit(0);
 };
@@ -156,8 +136,8 @@ app.listen(PORT, () => {
     console.log(`[STRIDE] Health check: http://localhost:${PORT}/health`);
     console.log(`[STRIDE] API base URL: http://localhost:${PORT}/api`);
 
-    // Start monitoring service
-    monitoringService.start();
+    // Start Telegram bot service only
+    telegramBotService.start();
 });
 
 export default app; 

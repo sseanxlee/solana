@@ -24,8 +24,8 @@ function IntegrationsContent() {
     const [integrations, setIntegrations] = useState<IntegrationStatus[]>([
         {
             id: 'telegram',
-            name: 'Telegram',
-            description: 'Receive instant alerts and notifications via Telegram bot',
+            name: 'Telegram Bot',
+            description: 'Chat with @stridesol_bot to create price & market cap alerts with simple commands',
             isConnected: false,
             icon: (
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -84,8 +84,23 @@ function IntegrationsContent() {
     }, [isAuthenticated, authLoading, router]);
 
     const handleConnect = (integrationId: string) => {
-        // Placeholder for connection logic
-        toast.success(`${integrationId} integration coming soon!`);
+        if (integrationId === 'telegram') {
+            // Open Telegram bot directly
+            const botUrl = 'https://t.me/stridesol_bot';
+            window.open(botUrl, '_blank');
+
+            toast(
+                <div>
+                    <p className="font-medium">Opening Telegram Bot!</p>
+                    <p className="text-sm">Send /start to begin setting up alerts.</p>
+                    <p className="text-sm mt-1">Use /help to see all available commands.</p>
+                </div>,
+                { duration: 5000, icon: '🤖' }
+            );
+        } else {
+            // Placeholder for other integrations
+            toast.success(`${integrationId} integration coming soon!`);
+        }
     };
 
     const handleDisconnect = (integrationId: string) => {

@@ -1,10 +1,9 @@
 import sgMail from '@sendgrid/mail';
-import TelegramBot from 'node-telegram-bot-api';
 import { query } from '../config/database';
 import { NotificationQueue, TokenAlert } from '../types';
+import { TelegramBotService } from './telegramBotService';
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@solana-alerts.com';
 const FROM_NAME = process.env.FROM_NAME || 'Solana Token Alerts';
 
@@ -13,13 +12,13 @@ if (SENDGRID_API_KEY) {
     sgMail.setApiKey(SENDGRID_API_KEY);
 }
 
-// Initialize Telegram Bot
-let telegramBot: TelegramBot | null = null;
-if (TELEGRAM_BOT_TOKEN) {
-    telegramBot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
-}
-
 export class NotificationService {
+    private telegramBotService: TelegramBotService;
+
+    constructor() {
+        this.telegramBotService = TelegramBotService.getInstance();
+    }
+
     async sendAlertNotification(alert: TokenAlert, currentPrice: number): Promise<boolean> {
         try {
             // Check if the notification type is enabled
@@ -122,12 +121,6 @@ export class NotificationService {
         queueId: string
     ): Promise<boolean> {
         try {
-            if (!telegramBot) {
-                console.error('Telegram bot not configured');
-                await this.updateQueueStatus(queueId, 'failed');
-                return false;
-            }
-
             const chatId = await this.getUserTelegramChatId(alert.user_id);
             if (!chatId) {
                 console.error('User Telegram chat ID not found');
@@ -135,15 +128,16 @@ export class NotificationService {
                 return false;
             }
 
-            await telegramBot.sendMessage(chatId, message, {
-                parse_mode: 'Markdown',
-                disable_web_page_preview: true,
-            });
+            const success = await this.telegramBotService.sendAlertNotification(chatId, message);
 
-            await this.updateQueueStatus(queueId, 'sent');
-
-            console.log(`Telegram message sent successfully to ${chatId}`);
-            return true;
+            if (success) {
+                await this.updateQueueStatus(queueId, 'sent');
+                console.log(`Telegram message sent successfully to ${chatId}`);
+                return true;
+            } else {
+                await this.updateQueueStatus(queueId, 'failed');
+                return false;
+            }
         } catch (error) {
             console.error('Error sending Telegram message:', error);
             await this.updateQueueStatus(queueId, 'failed');
@@ -185,6 +179,7 @@ export class NotificationService {
             console.error('Error fetching user Telegram chat ID:', error);
             return null;
         }
+
     }
 
     private generateAlertMessage(alert: TokenAlert, currentPrice: number): string {
@@ -338,14 +333,10 @@ This alert has been automatically disabled and won't trigger again unless you re
 
     private async sendQueuedTelegram(notification: NotificationQueue): Promise<boolean> {
         try {
-            if (!telegramBot) return false;
-
-            await telegramBot.sendMessage(notification.recipient, notification.message, {
-                parse_mode: 'Markdown',
-                disable_web_page_preview: true,
-            });
-
-            return true;
+            return await this.telegramBotService.sendAlertNotification(
+                notification.recipient,
+                notification.message
+            );
         } catch (error) {
             console.error('Error sending queued Telegram message:', error);
             return false;

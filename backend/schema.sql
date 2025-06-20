@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   wallet_address VARCHAR(44) UNIQUE NOT NULL,
   email VARCHAR(255),
-  telegram_chat_id VARCHAR(255),
+  telegram_chat_id VARCHAR(255) UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
