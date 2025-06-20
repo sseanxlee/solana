@@ -18,6 +18,9 @@ interface SearchHistoryItem extends TokenData {
         volume24h?: number;
     };
     isLoading?: boolean;
+    isLoadingPricing?: boolean;
+    isLoadingMetadata?: boolean;
+    metadata_last_updated?: number;
 }
 
 interface SearchModalProps {
@@ -30,7 +33,15 @@ interface SearchModalProps {
 export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHistory }: SearchModalProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
+    const [isRefreshingHistory, setIsRefreshingHistory] = useState(false);
     const router = useRouter();
+
+    // Auto-refresh history data when modal opens
+    useEffect(() => {
+        if (isOpen && searchHistory.length > 0 && !isRefreshingHistory) {
+            refreshHistoryData();
+        }
+    }, [isOpen]);
 
     // Close modal on Escape key
     useEffect(() => {
@@ -53,6 +64,136 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
             document.body.style.overflow = 'unset';
         };
     }, [isOpen, onClose]);
+
+    const refreshHistoryData = async () => {
+        if (searchHistory.length === 0) return;
+
+        setIsRefreshingHistory(true);
+
+        try {
+            // Refresh data for all tokens in parallel
+            const refreshPromises = searchHistory.map(async (token) => {
+                const currentTime = Date.now();
+                const oneDayMs = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+                // Check if we need to refresh metadata (logo, decimals, supply)
+                const needsMetadataRefresh = !token.metadata ||
+                    !token.metadata.logo ||
+                    !token.metadata.decimals ||
+                    !token.metadata.totalSupplyFormatted ||
+                    !token.metadata_last_updated ||
+                    (currentTime - token.metadata_last_updated) > oneDayMs;
+
+                // Set appropriate loading states - only show loading for data that's being refreshed
+                const initialLoadingState = {
+                    ...token,
+                    isLoadingPricing: true, // Always refresh pricing
+                    isLoadingMetadata: needsMetadataRefresh, // Only if needed
+                    isLoading: false // Keep general loading false since we have granular states
+                };
+
+                // Update the history immediately with loading states
+                onUpdateHistory(searchHistory.map(item =>
+                    item.address === token.address ? initialLoadingState : item
+                ));
+
+                try {
+                    // Always refresh pairs data (price, liquidity) as it changes frequently
+                    const pairsPromise = apiService.getTokenPairs(token.address);
+
+                    // Conditionally fetch metadata if needed
+                    let metadataPromise = null;
+                    if (needsMetadataRefresh) {
+                        metadataPromise = apiService.getTokenMetadata(token.address);
+                    }
+
+                    // Wait for both requests to complete
+                    const [pairsResponse, metadataResponse] = await Promise.all([
+                        pairsPromise,
+                        metadataPromise
+                    ]);
+
+                    let updatedToken = { ...token };
+
+                    // Update metadata only if we fetched it
+                    if (metadataResponse && metadataResponse.success && metadataResponse.data) {
+                        updatedToken.metadata = {
+                            logo: metadataResponse.data.logo,
+                            decimals: metadataResponse.data.decimals,
+                            totalSupplyFormatted: metadataResponse.data.totalSupplyFormatted
+                        };
+                        updatedToken.logo = metadataResponse.data.logo;
+                        updatedToken.metadata_last_updated = currentTime;
+                    }
+
+                    // Always update pairs data (price, liquidity)
+                    if (pairsResponse.success && pairsResponse.data && pairsResponse.data.pairs?.length > 0) {
+                        const sortedPairs = [...pairsResponse.data.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
+                        const topPair = sortedPairs[0];
+
+                        updatedToken.pairs = {
+                            topPrice: topPair.usdPrice,
+                            liquidityUsd: topPair.liquidityUsd,
+                            volume24h: topPair.liquidityUsd * 0.1
+                        };
+                        updatedToken.price = topPair.usdPrice;
+                    }
+
+                    // Calculate market cap if we have both supply and price
+                    if (updatedToken.metadata?.totalSupplyFormatted && updatedToken.price) {
+                        const supply = parseFloat(updatedToken.metadata.totalSupplyFormatted);
+                        updatedToken.market_cap = supply * updatedToken.price;
+                    }
+
+                    // Final update with all loading states set to false
+                    const finalToken = {
+                        ...updatedToken,
+                        isLoading: false,
+                        isLoadingPricing: false,
+                        isLoadingMetadata: false,
+                        search_timestamp: token.search_timestamp
+                    };
+
+                    // Update the history immediately with the final data
+                    onUpdateHistory(searchHistory.map(item =>
+                        item.address === token.address ? finalToken : item
+                    ));
+
+                    return finalToken;
+                } catch (error) {
+                    console.error(`Error refreshing data for ${token.symbol}:`, error);
+
+                    // Remove loading states on error
+                    const errorToken = {
+                        ...token,
+                        isLoading: false,
+                        isLoadingPricing: false,
+                        isLoadingMetadata: false
+                    };
+
+                    onUpdateHistory(searchHistory.map(item =>
+                        item.address === token.address ? errorToken : item
+                    ));
+
+                    return errorToken;
+                }
+            });
+
+            await Promise.all(refreshPromises);
+        } catch (error) {
+            console.error('Error refreshing history data:', error);
+            // Remove loading states on error
+            const resetHistory = searchHistory.map(item => ({
+                ...item,
+                isLoading: false,
+                isLoadingPricing: false,
+                isLoadingMetadata: false
+            }));
+            onUpdateHistory(resetHistory);
+        } finally {
+            setIsRefreshingHistory(false);
+        }
+    };
 
     const formatPrice = (price: number) => {
         if (!price || typeof price !== 'number' || isNaN(price)) {
@@ -264,7 +405,7 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                 {/* Header */}
                 <div className="px-6 py-4 border-b border-slate-700">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-white">Search by name, ticker, or CA...</h2>
+                        <h2 className="text-lg font-semibold text-white font-heading">Search by name, ticker, or CA...</h2>
                         <div className="flex items-center space-x-3">
                             <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">Esc</span>
                             <button
@@ -324,7 +465,7 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                     <div className="border-t border-slate-700">
                         <div className="px-6 py-4">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-medium text-slate-300">History</h3>
+                                <h3 className="text-sm font-medium text-slate-300 font-heading">History</h3>
                                 <button
                                     onClick={clearHistory}
                                     className="text-slate-400 hover:text-red-400 transition-colors text-xs"
@@ -343,7 +484,7 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                                             {/* Token Logo */}
                                             <div className="relative flex-shrink-0">
                                                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center overflow-hidden border border-slate-600">
-                                                    {token.isLoading ? (
+                                                    {token.isLoadingMetadata ? (
                                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
                                                     ) : (token.metadata?.logo || token.logo) ? (
                                                         <img
@@ -364,7 +505,7 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                                                 </div>
                                                 {/* Time since search or loading indicator */}
                                                 <div className="absolute -bottom-1 -right-1 bg-slate-600 border border-slate-500 rounded-full w-6 h-6 flex items-center justify-center">
-                                                    {token.isLoading ? (
+                                                    {token.isLoadingPricing ? (
                                                         <div className="animate-spin rounded-full h-3 w-3 border border-blue-500 border-t-transparent"></div>
                                                     ) : (
                                                         <span className="text-xs text-slate-300 font-medium">
@@ -377,7 +518,7 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                                             {/* Token Info */}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center space-x-2 mb-1">
-                                                    <h4 className="text-white font-medium truncate">{token.name}</h4>
+                                                    <h4 className="text-white font-medium truncate font-body">{token.name}</h4>
                                                     <span className="text-slate-400 text-sm">${token.symbol}</span>
                                                     {/* Copy indicator */}
                                                     <div className="w-4 h-4 bg-slate-600 rounded-sm flex items-center justify-center opacity-50">
@@ -412,19 +553,19 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                                                 <div className="text-right">
                                                     <div className="text-slate-400 text-xs">Price</div>
                                                     <div className="text-white font-medium">
-                                                        {token.isLoading ? '...' : `$${formatPrice(token.pairs?.topPrice || token.price)}`}
+                                                        {token.isLoadingPricing ? '...' : `$${formatPrice(token.pairs?.topPrice || token.price)}`}
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-slate-400 text-xs">MC</div>
                                                     <div className="text-white font-medium">
-                                                        {token.isLoading ? '...' : formatLargeNumber(token.market_cap || 0)}
+                                                        {token.isLoadingPricing ? '...' : formatLargeNumber(token.market_cap || 0)}
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
                                                     <div className="text-slate-400 text-xs">Liq</div>
                                                     <div className="text-white font-medium">
-                                                        {token.isLoading ? '...' : formatLargeNumber(token.pairs?.liquidityUsd || (token.market_cap || 0) * 0.05)}
+                                                        {token.isLoadingPricing ? '...' : formatLargeNumber(token.pairs?.liquidityUsd || (token.market_cap || 0) * 0.05)}
                                                     </div>
                                                 </div>
                                             </div>

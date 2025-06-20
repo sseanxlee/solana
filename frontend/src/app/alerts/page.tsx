@@ -30,7 +30,7 @@ export default function AlertsPage() {
         <DashboardLayout>
             <div className="space-y-6">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-100">Alerts</h1>
+                    <h1 className="text-3xl font-bold text-gray-100 font-heading">Alerts</h1>
                     <p className="text-gray-400 mt-1">
                         Manage your token price and market cap alerts
                     </p>
@@ -44,7 +44,7 @@ export default function AlertsPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7h5l-5-5v5z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17H4l5 5v-5z" />
                         </svg>
-                        <h3 className="text-lg font-semibold text-gray-200 mb-2">Alerts Management</h3>
+                        <h3 className="text-lg font-semibold text-gray-200 mb-2 font-heading">Alerts Management</h3>
                         <p className="text-gray-400">This page will contain alert management functionality.</p>
                     </div>
                 </div>

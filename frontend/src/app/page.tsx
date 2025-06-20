@@ -71,7 +71,7 @@ function BeginButton() {
         <button
             onClick={handleBeginClick}
             disabled={isLoading}
-            className="bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white font-semibold py-4 px-8 rounded-lg text-lg transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 transition-transform disabled:transform-none disabled:shadow-lg"
+            className="bg-primary-500 hover:bg-primary-600 disabled:bg-primary-300 text-white font-semibold py-4 px-8 rounded-lg text-lg transition-colors duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 transition-transform disabled:transform-none disabled:shadow-lg font-heading"
         >
             {getButtonText()}
         </button>
@@ -106,7 +106,7 @@ export default function Home() {
                 {/* Loading Content */}
                 <main className="relative z-20 h-full flex items-center justify-center">
                     <div className="text-center px-6">
-                        <h1 className="text-7xl sm:text-8xl lg:text-9xl font-black text-gray-300 tracking-tight leading-none mb-8">
+                        <h1 className="text-7xl sm:text-8xl lg:text-9xl font-black text-gray-300 tracking-tight leading-none mb-8 font-heading">
                             STRIDE
                         </h1>
                         <div className="flex items-center justify-center space-x-2">
@@ -137,7 +137,7 @@ export default function Home() {
                 <div className="flex justify-between items-center">
                     <div className="flex items-center space-x-3">
                         <img src="/logo.png" alt="Stride Logo" className="w-8 h-8 invert" />
-                        <span className="text-xl font-bold text-white">Stride</span>
+                        <span className="text-xl font-bold text-white font-heading">Stride</span>
                     </div>
                 </div>
             </header>
@@ -146,12 +146,12 @@ export default function Home() {
             <main className="relative z-20 h-full flex items-center justify-center pt-0 -mt-16">
                 <div className="text-center px-6 max-w-4xl mx-auto">
                     {/* Main Headline */}
-                    <h1 className="text-7xl sm:text-8xl lg:text-9xl font-black text-gray-300 tracking-tight leading-none mb-8">
+                    <h1 className="text-7xl sm:text-8xl lg:text-9xl font-black text-gray-300 tracking-tight leading-none mb-8 font-heading">
                         STRIDE
                     </h1>
 
                     {/* Subtitle */}
-                    <p className="text-xl sm:text-2xl text-white/90 font-medium mb-4 max-w-2xl mx-auto">
+                    <p className="text-xl sm:text-2xl text-white/90 font-medium mb-4 max-w-2xl mx-auto font-body">
                         Advanced real-time alerts for Solana tokens
                     </p>
 

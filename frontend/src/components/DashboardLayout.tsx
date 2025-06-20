@@ -111,6 +111,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             )
         },
         {
+            href: '/integrations',
+            label: 'Integrations',
+            icon: (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+            )
+        },
+        {
             href: '/settings',
             label: 'Settings',
             icon: (
@@ -149,7 +158,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                             {!sidebarCollapsed && (
                                 <Link href="/dashboard" className="flex items-center space-x-3">
                                     <img src="/logo.svg" alt="Stride Logo" className="w-6 h-6 text-primary-600" />
-                                    <span className="text-lg font-bold text-gray-100">Stride</span>
+                                    <span className="text-lg font-bold text-gray-100 font-heading">Stride</span>
                                 </Link>
                             )}
                             {sidebarCollapsed && (
@@ -208,7 +217,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                     >
                                         <span className="flex-shrink-0">{item.icon}</span>
                                         {!sidebarCollapsed && (
-                                            <span className="font-medium">{item.label}</span>
+                                            <span className="font-medium font-body">{item.label}</span>
                                         )}
                                     </Link>
                                 );
@@ -221,7 +230,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         {/* Followed Tokens Section - Takes remaining space */}
                         {!sidebarCollapsed && (
                             <div className="px-4 py-4 border-t border-gray-800/30 flex-1">
-                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 font-heading">
                                     Followed Tokens
                                 </h3>
                                 <div className="text-center py-6">
@@ -249,7 +258,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
-                                {!sidebarCollapsed && <span className="font-medium">Disconnect</span>}
+                                {!sidebarCollapsed && <span className="font-medium font-body">Disconnect</span>}
                             </button>
                         </div>
                     </aside>

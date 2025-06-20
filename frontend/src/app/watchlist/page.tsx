@@ -32,7 +32,7 @@ export default function WatchlistPage() {
         <DashboardLayout>
             <div className="space-y-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">Watchlist</h1>
+                    <h1 className="text-3xl font-bold text-white mb-2 font-heading">Watchlist</h1>
                     <p className="text-slate-400">Your tracked Solana tokens and favorites</p>
                 </div>
 
@@ -42,7 +42,7 @@ export default function WatchlistPage() {
                         <svg className="w-16 h-16 text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                         </svg>
-                        <h3 className="text-lg font-semibold text-slate-200 mb-2">No Tokens in Watchlist</h3>
+                        <h3 className="text-lg font-semibold text-slate-200 mb-2 font-heading">No Tokens in Watchlist</h3>
                         <p className="text-slate-400 mb-4">
                             Search for tokens and add them to your watchlist to track their performance.
                         </p>

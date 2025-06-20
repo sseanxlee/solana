@@ -107,6 +107,17 @@ export interface TokenMetadata {
     logo?: string;
     totalSupply: string;
     totalSupplyFormatted: string;
+    fullyDilutedValue?: string;
+    links?: {
+        website?: string;
+        twitter?: string;
+        telegram?: string;
+        reddit?: string;
+        moralis?: string;
+    };
+    description?: string;
+    isVerifiedContract?: boolean;
+    possibleSpam?: boolean;
 }
 
 export interface TokenAnalytics {

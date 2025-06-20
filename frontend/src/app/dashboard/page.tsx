@@ -93,7 +93,7 @@ export default function Dashboard() {
                 {/* Header */}
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-100">Dashboard</h1>
+                        <h1 className="text-3xl font-bold text-gray-100 font-heading">Dashboard</h1>
                     </div>
                     <div className="flex space-x-3">
                         <button
@@ -162,7 +162,7 @@ export default function Dashboard() {
                 {/* Alerts List */}
                 <div className="card-elevated">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-lg font-semibold text-gray-100">Your Alerts</h2>
+                        <h2 className="text-lg font-semibold text-gray-100 font-heading">Your Alerts</h2>
                         {alerts.length > 0 && (
                             <button
                                 onClick={loadAlerts}
@@ -201,7 +201,7 @@ export default function Dashboard() {
                     <div className="bg-gray-900 border border-gray-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-semibold text-gray-100">Create New Alert</h2>
+                                <h2 className="text-lg font-semibold text-gray-100 font-heading">Create New Alert</h2>
                                 <button
                                     onClick={() => setShowCreateForm(false)}
                                     className="text-gray-400 hover:text-gray-200 transition-colors"

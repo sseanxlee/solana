@@ -4,25 +4,47 @@
 
 @layer base {
     html {
-        font-family: var(--font-geist-sans), system-ui, sans-serif;
+        font-family: 'Funnel Sans', var(--font-geist-sans), system-ui, sans-serif;
     }
 
     body {
         @apply bg-gray-950 text-gray-100;
+        font-family: 'Funnel Sans', sans-serif;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        font-family: 'Exo 2', sans-serif;
+        font-weight: 600;
+    }
+
+    .font-heading {
+        font-family: 'Exo 2', sans-serif;
+    }
+
+    .font-body {
+        font-family: 'Funnel Sans', sans-serif;
     }
 }
 
 @layer components {
     .btn-primary {
         @apply bg-primary-600 hover:bg-primary-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 border border-primary-500/20 hover:border-primary-400/30;
+        font-family: 'Exo 2', sans-serif;
     }
 
     .btn-secondary {
         @apply bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 border border-gray-700 hover:border-gray-600;
+        font-family: 'Exo 2', sans-serif;
     }
 
     .btn-danger {
         @apply bg-error-600 hover:bg-error-500 text-white font-medium py-2.5 px-4 rounded-lg transition-all duration-200 border border-error-500/20 hover:border-error-400/30;
+        font-family: 'Exo 2', sans-serif;
     }
 
     .card {

@@ -51,7 +51,9 @@ module.exports = {
                 },
             },
             fontFamily: {
-                sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+                sans: ['Funnel Sans', 'var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+                heading: ['Exo 2', 'system-ui', 'sans-serif'],
+                body: ['Funnel Sans', 'system-ui', 'sans-serif'],
             },
         },
     },
