@@ -340,10 +340,11 @@ function WatchlistContent() {
                                     href={`https://solscan.io/token/${tokenData.address}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                    className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
                                     title="View on Solscan"
                                 >
-                                    Solscan
+                                    <img src="/solscanlogo.png" alt="Solscan" className="w-4 h-4" />
+                                    <span>Solscan</span>
                                 </a>
 
                                 {tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 && (
@@ -351,10 +352,11 @@ function WatchlistContent() {
                                         href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
                                         title="Trade on Axiom"
                                     >
-                                        Axiom
+                                        <img src="/axiomlogo.jpg" alt="Axiom" className="w-4 h-4 rounded" />
+                                        <span>Axiom</span>
                                     </a>
                                 )}
                             </div>
@@ -468,10 +470,11 @@ function WatchlistContent() {
                                         href={`https://solscan.io/token/${tokenData.address}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
                                         title="View on Solscan"
                                     >
-                                        Solscan
+                                        <img src="/solscanlogo.png" alt="Solscan" className="w-4 h-4" />
+                                        <span>Solscan</span>
                                     </a>
 
                                     {/* Axiom Link */}
@@ -480,10 +483,11 @@ function WatchlistContent() {
                                             href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                            className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
                                             title="Trade on Axiom"
                                         >
-                                            Axiom
+                                            <img src="/axiomlogo.jpg" alt="Axiom" className="w-4 h-4 rounded" />
+                                            <span>Axiom</span>
                                         </a>
                                     )}
                                 </div>
