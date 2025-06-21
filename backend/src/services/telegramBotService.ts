@@ -1,13 +1,14 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { BirdeyeService, BirdeyeTokenMarketData } from './birdeyeService';
+import { SolanaStreamingService } from './solanaStreamingService';
 import axios from 'axios';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY || '';
 const SOLANA_GATEWAY_URL = 'https://solana-gateway.moralis.io';
 const SOLANA_CHAIN = 'mainnet';
 
-// Solana address regex pattern
+// Regex for Solana addresses
 const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export class TelegramBotService {
@@ -15,19 +16,18 @@ export class TelegramBotService {
     private bot: TelegramBot | null = null;
     private isRunning: boolean = false;
     private birdeyeService: BirdeyeService;
+    private streamingService: SolanaStreamingService;
 
     private constructor() {
-        this.birdeyeService = BirdeyeService.getInstance();
-
-        if (TELEGRAM_BOT_TOKEN) {
-            // Initialize bot WITHOUT polling first - we'll start it manually
-            this.bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
-                polling: false
-            });
-            console.log('Telegram bot service initialized');
-        } else {
-            console.warn('Telegram bot token not configured');
+        if (!TELEGRAM_TOKEN) {
+            throw new Error('TELEGRAM_BOT_TOKEN environment variable is required');
         }
+        this.bot = new TelegramBot(TELEGRAM_TOKEN);
+        this.birdeyeService = BirdeyeService.getInstance();
+        this.streamingService = SolanaStreamingService.getInstance();
+
+        // Set up streaming service callbacks
+        this.setupStreamingCallbacks();
     }
 
     public static getInstance(): TelegramBotService {
@@ -87,18 +87,22 @@ export class TelegramBotService {
         try {
             // Define bot commands for autocomplete suggestions
             const commands = [
-                { command: 'start', description: 'Start the bot and get a welcome message' },
-                { command: 'help', description: 'Show all available commands' },
+                { command: 'start', description: 'Start the bot and get welcome message' },
+                { command: 'help', description: 'Show help and available commands' },
+                { command: 'startmonitoring', description: 'Start monitoring token swaps via WebSocket' },
+                { command: 'stopmonitoring', description: 'Stop WebSocket monitoring' },
+                { command: 'setstreamtoken', description: 'Change the monitored token' },
+                { command: 'streamstatus', description: 'Check WebSocket monitoring status' },
                 { command: 'watchlist', description: 'View your token watchlist (coming soon)' },
-                { command: 'addtoken', description: 'Add a token to your watchlist (coming soon)' },
-                { command: 'removetoken', description: 'Remove a token from your watchlist (coming soon)' },
+                { command: 'addtoken', description: 'Add token to watchlist (coming soon)' },
+                { command: 'removetoken', description: 'Remove token from watchlist (coming soon)' },
                 { command: 'alerts', description: 'View your price alerts (coming soon)' },
-                { command: 'setalert', description: 'Set a price alert for a token (coming soon)' },
+                { command: 'setalert', description: 'Set a price alert (coming soon)' },
                 { command: 'removealert', description: 'Remove a price alert (coming soon)' },
-                { command: 'portfolio', description: 'View your portfolio summary (coming soon)' },
-                { command: 'price', description: 'Get current price of a token (coming soon)' },
+                { command: 'portfolio', description: 'View portfolio summary (coming soon)' },
+                { command: 'price', description: 'Get current token price (coming soon)' },
                 { command: 'trending', description: 'See trending tokens (coming soon)' },
-                { command: 'settings', description: 'Configure your notification preferences (coming soon)' }
+                { command: 'settings', description: 'Configure preferences (coming soon)' }
             ];
 
             await this.bot.setMyCommands(commands);
@@ -131,22 +135,30 @@ Let's get started!
             await this.sendMessage(chatId, welcomeMessage, { parse_mode: 'Markdown' });
         });
 
-        // Help command - show all commands
+        // Handle /help command
         this.bot.onText(/\/help/, async (msg) => {
             const chatId = msg.chat.id.toString();
-
             const helpMessage = `
-*Solana Token Alerts Bot - Commands*
+*Welcome to SolanaBot*
 
-*Currently Available:*
-/start - Start the bot and get welcome message
+Available Commands:
+
+/start - Welcome message
 /help - Show this help message
 
+*Token Information:*
+Send any Solana token address to get detailed info
+
+*WebSocket Monitoring:*
+/startmonitoring <token_address> - Start monitoring token swaps
+/stopmonitoring - Stop WebSocket monitoring
+/setstreamtoken <token_address> - Change monitored token
+/streamstatus - Check monitoring status
 
 *Coming Soon:*
 /watchlist - View your token watchlist
-/addtoken - Add a token to your watchlist
-/removetoken - Remove a token from your watchlist
+/addtoken - Add token to watchlist
+/removetoken - Remove token from watchlist
 /alerts - View your price alerts
 /setalert - Set a price alert for a token
 /removealert - Remove a price alert
@@ -154,7 +166,6 @@ Let's get started!
 /price - Get current price of a token
 /trending - See trending tokens
 /settings - Configure notification preferences
-
 
 Stay tuned for more features!
             `;
@@ -198,6 +209,103 @@ Stay tuned for more features!
                     show_alert: true
                 });
             }
+        });
+
+        // Handle /startmonitoring command
+        this.bot.onText(/\/startmonitoring(?:\s+(.+))?/, async (msg, match) => {
+            const chatId = msg.chat.id.toString();
+            const tokenAddress = match?.[1]?.trim();
+
+            if (!tokenAddress) {
+                await this.sendMessage(chatId, 'Please provide a token address.\n\nUsage: /startmonitoring <token_address>');
+                return;
+            }
+
+            if (!SOLANA_ADDRESS_REGEX.test(tokenAddress)) {
+                await this.sendMessage(chatId, 'Invalid Solana token address format.');
+                return;
+            }
+
+            try {
+                console.log('TelegramBot: Adding monitoring user:', chatId);
+                this.addMonitoringUser(chatId);
+                console.log('TelegramBot: Current monitoring users:', this.getMonitoringUsers());
+
+                const success = await this.streamingService.startMonitoring(tokenAddress);
+                if (success) {
+                    await this.sendMessage(chatId, `Started monitoring token: \`${tokenAddress.slice(0, 8)}...${tokenAddress.slice(-8)}\`\n\nYou will receive real-time swap notifications.`, { parse_mode: 'Markdown' });
+                } else {
+                    await this.sendMessage(chatId, 'Failed to start monitoring. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error starting monitoring:', error);
+                await this.sendMessage(chatId, 'Error starting monitoring. Please try again later.');
+            }
+        });
+
+        // Handle /stopmonitoring command
+        this.bot.onText(/\/stopmonitoring/, async (msg) => {
+            const chatId = msg.chat.id.toString();
+
+            try {
+                await this.streamingService.stopMonitoring();
+                this.removeMonitoringUser(chatId);
+                await this.sendMessage(chatId, 'WebSocket monitoring stopped.');
+            } catch (error) {
+                console.error('Error stopping monitoring:', error);
+                await this.sendMessage(chatId, 'Error stopping monitoring. Please try again.');
+            }
+        });
+
+        // Handle /setstreamtoken command
+        this.bot.onText(/\/setstreamtoken(?:\s+(.+))?/, async (msg, match) => {
+            const chatId = msg.chat.id.toString();
+            const tokenAddress = match?.[1]?.trim();
+
+            if (!tokenAddress) {
+                await this.sendMessage(chatId, 'Please provide a token address.\n\nUsage: /setstreamtoken <token_address>');
+                return;
+            }
+
+            if (!SOLANA_ADDRESS_REGEX.test(tokenAddress)) {
+                await this.sendMessage(chatId, 'Invalid Solana token address format.');
+                return;
+            }
+
+            try {
+                const success = await this.streamingService.startMonitoring(tokenAddress);
+                if (success) {
+                    this.addMonitoringUser(chatId);
+                    await this.sendMessage(chatId, `Switched monitoring to token: \`${tokenAddress.slice(0, 8)}...${tokenAddress.slice(-8)}\``, { parse_mode: 'Markdown' });
+                } else {
+                    await this.sendMessage(chatId, 'Failed to change monitored token. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error changing monitored token:', error);
+                await this.sendMessage(chatId, 'Error changing monitored token. Please try again later.');
+            }
+        });
+
+        // Handle /streamstatus command
+        this.bot.onText(/\/streamstatus/, async (msg) => {
+            const chatId = msg.chat.id.toString();
+            const isMonitoring = this.streamingService.isMonitoring();
+            const currentToken = this.streamingService.getCurrentToken();
+            const isUserMonitoring = this.monitoringUsers.has(chatId);
+
+            const statusMessage = `
+*WebSocket Monitoring Status*
+
+Service Status: ${isMonitoring ? '*Active*' : '*Inactive*'}
+Your Notifications: ${isUserMonitoring ? '*Enabled*' : '*Disabled*'}
+Current Token: ${currentToken ? `\`${currentToken.slice(0, 8)}...${currentToken.slice(-8)}\`` : '*None*'}
+Active Users: ${this.getMonitoringUsers().length}
+
+${!isMonitoring ? '\nUse /startmonitoring <token_address> to begin monitoring.' : ''}
+${!isUserMonitoring && isMonitoring ? '\nUse /startmonitoring to enable notifications for yourself.' : ''}
+            `.trim();
+
+            await this.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
         });
 
         // Handle any other message
@@ -446,5 +554,109 @@ FDV: *${fdv}*
 
     isRunningBot(): boolean {
         return this.isRunning;
+    }
+
+    private setupStreamingCallbacks(): void {
+        console.log('TelegramBot: Setting up streaming callbacks...');
+        this.streamingService.setCallbacks({
+            onSwap: (notification) => {
+                console.log('TelegramBot: onSwap callback triggered');
+                this.handleSwapNotification(notification);
+            },
+            onPing: () => {
+                console.log('TelegramBot: onPing callback triggered');
+                this.handlePingNotification();
+            },
+            onError: (error) => {
+                console.log('TelegramBot: onError callback triggered');
+                this.handleStreamingError(error);
+            },
+            onStatus: (status) => {
+                console.log('TelegramBot: onStatus callback triggered');
+                this.handleStreamingStatus(status);
+            }
+        });
+        console.log('TelegramBot: Streaming callbacks set up successfully');
+    }
+
+    private async handleSwapNotification(notification: any): Promise<void> {
+        console.log('TelegramBot: handleSwapNotification called!', notification);
+
+        const { swap, blockTime, signature, slot } = notification;
+        const shortToken = `${swap.baseTokenMint.slice(0, 8)}...${swap.baseTokenMint.slice(-8)}`;
+
+        const message = `
+*SWAP DETECTED*
+
+Token: \`${shortToken}\`
+Type: *${swap.swapType.toUpperCase()}*
+Price: *${swap.quotePrice} SOL*
+USD Value: *$${swap.usdValue.toLocaleString()}*
+Amount: ${swap.baseAmount}
+Exchange: ${swap.sourceExchange || 'Unknown'}
+Time: ${new Date(blockTime * 1000).toLocaleString()}
+
+Signature: \`${signature.slice(0, 16)}...\`
+        `.trim();
+
+        console.log('TelegramBot: Broadcasting swap message to users:', this.getMonitoringUsers());
+
+        // Send to all monitoring users (for now, we'll broadcast)
+        // In production, you'd track which users want notifications
+        await this.broadcastToMonitoringUsers(message);
+    }
+
+    private async handlePingNotification(): Promise<void> {
+        console.log('TelegramBot: handlePingNotification called!');
+
+        const currentToken = this.streamingService.getCurrentToken();
+        const message = `
+*WebSocket Ping*
+
+Monitoring: ${currentToken ? `\`${currentToken.slice(0, 8)}...${currentToken.slice(-8)}\`` : 'None'}
+Status: Active
+Time: ${new Date().toLocaleString()}
+        `.trim();
+
+        console.log('TelegramBot: Broadcasting ping message to users:', this.getMonitoringUsers());
+        await this.broadcastToMonitoringUsers(message);
+    }
+
+    private async handleStreamingError(error: string): Promise<void> {
+        const message = `*WebSocket Error*\n\n${error}`;
+        await this.broadcastToMonitoringUsers(message);
+    }
+
+    private async handleStreamingStatus(status: string): Promise<void> {
+        const message = `*WebSocket Status*\n\n${status}`;
+        await this.broadcastToMonitoringUsers(message);
+    }
+
+    private async broadcastToMonitoringUsers(message: string): Promise<void> {
+        // For now, store active monitoring users in memory
+        // In production, you'd use a database
+        const monitoringUsers = this.getMonitoringUsers();
+
+        for (const chatId of monitoringUsers) {
+            try {
+                await this.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            } catch (error) {
+                console.error(`Failed to send message to ${chatId}:`, error);
+            }
+        }
+    }
+
+    private monitoringUsers: Set<string> = new Set();
+
+    private addMonitoringUser(chatId: string): void {
+        this.monitoringUsers.add(chatId);
+    }
+
+    private removeMonitoringUser(chatId: string): void {
+        this.monitoringUsers.delete(chatId);
+    }
+
+    private getMonitoringUsers(): string[] {
+        return Array.from(this.monitoringUsers);
     }
 } 

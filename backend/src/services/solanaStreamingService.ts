@@ -13,6 +13,8 @@ interface SwapNotification {
         usdValue: number;
         baseAmount: string;
         swapType: 'buy' | 'sell';
+        sourceExchange?: string;
+        quoteTokenLiquidity?: string;
     };
 }
 
@@ -25,6 +27,18 @@ interface SubscriptionParams {
     };
 }
 
+// Security Configuration
+const SECURITY_CONFIG = {
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.2',
+    checkServerIdentity: (hostname: string, cert: any) => {
+        if (hostname !== 'api.solanastreaming.com') {
+            throw new Error('Hostname mismatch');
+        }
+        return undefined;
+    }
+};
+
 export class SolanaStreamingService {
     private static instance: SolanaStreamingService | null = null;
     private ws: WebSocket | null = null;
@@ -33,8 +47,16 @@ export class SolanaStreamingService {
     private subscriptionId: number | null = null;
     private reconnectAttempts: number = 0;
     private maxReconnectAttempts: number = 5;
-    private reconnectDelay: number = 5000; // 5 seconds
+    private reconnectDelay: number = 5000;
     private pingInterval: NodeJS.Timeout | null = null;
+    private messageCounter: number = 1;
+    private currentToken: string | null = null;
+
+    // Callback for handling events
+    private onSwapCallback?: (notification: SwapNotification) => void;
+    private onPingCallback?: () => void;
+    private onErrorCallback?: (error: string) => void;
+    private onStatusCallback?: (status: string) => void;
 
     private constructor() {
         this.apiKey = process.env.SOLANA_STREAMING_API_KEY || '';
@@ -50,24 +72,81 @@ export class SolanaStreamingService {
         return SolanaStreamingService.instance;
     }
 
-    public async connect(): Promise<void> {
+    // Set callbacks for Telegram integration
+    public setCallbacks(callbacks: {
+        onSwap?: (notification: SwapNotification) => void;
+        onPing?: () => void;
+        onError?: (error: string) => void;
+        onStatus?: (status: string) => void;
+    }) {
+        this.onSwapCallback = callbacks.onSwap;
+        this.onPingCallback = callbacks.onPing;
+        this.onErrorCallback = callbacks.onError;
+        this.onStatusCallback = callbacks.onStatus;
+    }
+
+    public async startMonitoring(tokenAddress: string): Promise<boolean> {
+        try {
+            // Validate token address
+            const SOLANA_ADDRESS_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+            if (!SOLANA_ADDRESS_REGEX.test(tokenAddress)) {
+                this.onErrorCallback?.('Invalid Solana token address format');
+                return false;
+            }
+
+            this.currentToken = tokenAddress;
+
+            if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+                // If already connected, just change subscription
+                await this.updateSubscription(tokenAddress);
+                return true;
+            } else {
+                // Connect and subscribe
+                await this.connect();
+                await this.subscribeToToken(tokenAddress);
+                return true;
+            }
+        } catch (error) {
+            console.error('Error starting monitoring:', error);
+            this.onErrorCallback?.(`Failed to start monitoring: ${error}`);
+            return false;
+        }
+    }
+
+    public async stopMonitoring(): Promise<void> {
+        this.onStatusCallback?.('Stopping WebSocket monitoring...');
+        await this.disconnect();
+    }
+
+    public getCurrentToken(): string | null {
+        return this.currentToken;
+    }
+
+    public isMonitoring(): boolean {
+        return this.isConnected && this.currentToken !== null;
+    }
+
+    private async connect(): Promise<void> {
         if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-            console.log('Already connected to SolanaStreaming');
             return;
         }
 
         try {
-            console.log('Connecting to SolanaStreaming WebSocket...');
+            this.onStatusCallback?.('Connecting to SolanaStreaming...');
 
             this.ws = new WebSocket('wss://api.solanastreaming.com', {
                 headers: {
-                    'X-API-KEY': this.apiKey
-                }
+                    'X-API-KEY': this.apiKey,
+                    'User-Agent': 'SolanaBot/1.0',
+                    'Accept': 'application/json'
+                },
+                ...SECURITY_CONFIG,
+                handshakeTimeout: 10000,
+                maxPayload: 1024 * 1024
             });
 
             this.setupEventHandlers();
 
-            // Wait for connection to be established
             await new Promise<void>((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     reject(new Error('Connection timeout'));
@@ -86,6 +165,7 @@ export class SolanaStreamingService {
 
         } catch (error) {
             console.error('Failed to connect to SolanaStreaming:', error);
+            this.onErrorCallback?.(`Connection failed: ${error}`);
             throw error;
         }
     }
@@ -98,6 +178,7 @@ export class SolanaStreamingService {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             this.startPingInterval();
+            this.onStatusCallback?.('WebSocket connected successfully');
         });
 
         this.ws.on('message', (data) => {
@@ -106,6 +187,7 @@ export class SolanaStreamingService {
                 this.handleMessage(message);
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
+                this.onErrorCallback?.('Failed to parse WebSocket message');
             }
         });
 
@@ -113,15 +195,18 @@ export class SolanaStreamingService {
             console.log(`WebSocket connection closed: ${code} - ${reason}`);
             this.isConnected = false;
             this.stopPingInterval();
+            this.onStatusCallback?.(`WebSocket disconnected: ${code}`);
             this.handleReconnection();
         });
 
         this.ws.on('error', (error) => {
             console.error('WebSocket error:', error);
+            this.onErrorCallback?.(`WebSocket error: ${error.message}`);
         });
 
         this.ws.on('pong', () => {
             console.log('Received pong from server');
+            this.onPingCallback?.(); // Trigger Telegram message on ping
         });
     }
 
@@ -130,12 +215,26 @@ export class SolanaStreamingService {
         if (message.id && message.result && message.result.subscription_id) {
             this.subscriptionId = message.result.subscription_id;
             console.log(`Subscription created with ID: ${this.subscriptionId}`);
+            this.onStatusCallback?.(`Monitoring started for token: ${this.currentToken?.slice(0, 8)}...`);
             return;
         }
 
-        // Handle swap notifications
-        if (message.slot && message.swap) {
-            this.handleSwapNotification(message as SwapNotification);
+        // Handle errors
+        if (message.error) {
+            console.error('Subscription error:', message.error);
+            this.onErrorCallback?.(`Subscription error: ${message.error.message}`);
+            return;
+        }
+
+        // Handle swap notifications - correct structure check
+        if (message.method === 'swapNotification' && message.params) {
+            const swapNotification: SwapNotification = {
+                slot: message.params.slot,
+                signature: message.params.signature,
+                blockTime: message.params.blockTime,
+                swap: message.params.swap
+            };
+            this.handleSwapNotification(swapNotification);
             return;
         }
 
@@ -143,49 +242,53 @@ export class SolanaStreamingService {
     }
 
     private handleSwapNotification(notification: SwapNotification): void {
-        const { swap, blockTime, signature } = notification;
+        const { swap, blockTime, signature, slot } = notification;
 
-        console.log(`
-🔄 Swap Detected:
-Token: ${swap.baseTokenMint}
-Type: ${swap.swapType.toUpperCase()}
-USD Value: $${swap.usdValue.toLocaleString()}
-Price: ${swap.quotePrice} SOL
-Time: ${new Date(blockTime * 1000).toISOString()}
-Signature: ${signature}
-        `);
+        console.log(`Swap detected on ${swap.baseTokenMint}: ${swap.swapType} $${swap.usdValue}`);
 
-        // Here you can add logic to:
-        // 1. Calculate market cap changes
-        // 2. Trigger alerts for large movements
-        // 3. Store data in database
-        // 4. Send notifications via Telegram
+        // Send to Telegram via callback
+        this.onSwapCallback?.(notification);
     }
 
-    public async subscribeToSwaps(params: SubscriptionParams): Promise<void> {
+    private async subscribeToToken(tokenAddress: string): Promise<void> {
         if (!this.isConnected || !this.ws) {
             throw new Error('Not connected to WebSocket');
         }
 
         const subscribeMessage = {
             jsonrpc: "2.0",
-            id: 1,
+            id: this.messageCounter++,
             method: "swapSubscribe",
-            params
+            params: {
+                include: {
+                    baseTokenMint: [tokenAddress]
+                }
+            }
         };
 
-        console.log('Subscribing to swaps with params:', JSON.stringify(params, null, 2));
+        console.log('Subscribing to token:', tokenAddress);
         this.ws.send(JSON.stringify(subscribeMessage));
     }
 
-    public async unsubscribe(): Promise<void> {
+    private async updateSubscription(tokenAddress: string): Promise<void> {
+        // Unsubscribe from current token
+        if (this.subscriptionId) {
+            await this.unsubscribe();
+        }
+
+        // Subscribe to new token
+        this.currentToken = tokenAddress;
+        await this.subscribeToToken(tokenAddress);
+    }
+
+    private async unsubscribe(): Promise<void> {
         if (!this.isConnected || !this.ws || !this.subscriptionId) {
             return;
         }
 
         const unsubscribeMessage = {
             jsonrpc: "2.0",
-            id: 2,
+            id: this.messageCounter++,
             method: "swapUnsubscribe",
             params: {
                 subscription_id: this.subscriptionId
@@ -197,7 +300,7 @@ Signature: ${signature}
     }
 
     private startPingInterval(): void {
-        // Send ping every 30 seconds to keep connection alive
+        // Send ping every 30 seconds
         this.pingInterval = setInterval(() => {
             if (this.ws?.readyState === WebSocket.OPEN) {
                 this.ws.ping();
@@ -216,19 +319,18 @@ Signature: ${signature}
     private async handleReconnection(): Promise<void> {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('Max reconnection attempts reached');
+            this.onErrorCallback?.('Max reconnection attempts reached');
             return;
         }
 
         this.reconnectAttempts++;
-        console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+        this.onStatusCallback?.(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
         setTimeout(async () => {
             try {
                 await this.connect();
-                // Re-subscribe if we had a subscription before
-                if (this.subscriptionId) {
-                    // You might want to store the last subscription params to re-subscribe
-                    console.log('Reconnected successfully');
+                if (this.currentToken) {
+                    await this.subscribeToToken(this.currentToken);
                 }
             } catch (error) {
                 console.error('Reconnection failed:', error);
@@ -250,10 +352,7 @@ Signature: ${signature}
         }
 
         this.isConnected = false;
+        this.currentToken = null;
         console.log('Disconnected from SolanaStreaming');
-    }
-
-    public isWebSocketConnected(): boolean {
-        return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
     }
 } 

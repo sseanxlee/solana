@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import alertRoutes from './routes/alerts';
 import tokenRoutes from './routes/tokens';
 import { TelegramBotService } from './services/telegramBotService';
+import { SolanaStreamingService } from './services/solanaStreamingService';
 
 // Load environment variables
 dotenv.config();
@@ -16,8 +17,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.API_PORT || 3001;
 
-// Initialize Telegram bot service (singleton)
+// Initialize services (singletons)
 const telegramBotService = TelegramBotService.getInstance();
+const solanaStreamingService = SolanaStreamingService.getInstance();
+
+// Setup integration between services
+console.log('[STRIDE] Setting up service integration...');
+
+// The TelegramBotService constructor already sets up the callbacks automatically
+// when it initializes the SolanaStreamingService
 
 // Security middleware
 app.use(helmet());
