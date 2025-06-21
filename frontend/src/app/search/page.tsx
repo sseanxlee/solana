@@ -26,9 +26,11 @@ function WatchlistContent() {
     const [tokenData, setTokenData] = useState<TokenData | null>(null);
     const [tokenPairs, setTokenPairs] = useState<TokenPairsResponse | null>(null);
     const [tokenMetadata, setTokenMetadata] = useState<TokenMetadata | null>(null);
+    const [birdeyeMarketData, setBirdeyeMarketData] = useState<any | null>(null);
     const [isLoadingToken, setIsLoadingToken] = useState(false);
     const [isLoadingPairs, setIsLoadingPairs] = useState(false);
     const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+    const [isLoadingMarketData, setIsLoadingMarketData] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
@@ -49,6 +51,7 @@ function WatchlistContent() {
             setTokenData(null);
             setTokenPairs(null);
             setTokenMetadata(null);
+            setBirdeyeMarketData(null);
 
             const response = await apiService.searchTokens(tokenAddress);
 
@@ -56,9 +59,10 @@ function WatchlistContent() {
                 const tokenResult = response.data[0];
                 setTokenData(tokenResult);
 
-                // Fetch pairs and metadata data in parallel
+                // Fetch pairs, metadata, and market data in parallel
                 fetchTokenPairs(tokenAddress);
                 fetchTokenMetadata(tokenAddress);
+                fetchBirdeyeMarketData(tokenAddress);
             } else {
                 toast.error('Token not found');
             }
@@ -108,7 +112,32 @@ function WatchlistContent() {
         }
     };
 
+    const fetchBirdeyeMarketData = async (tokenAddress: string) => {
+        try {
+            setIsLoadingMarketData(true);
+            const marketDataResponse = await apiService.getTokenMarketData(tokenAddress);
+
+            if (marketDataResponse.success && marketDataResponse.data) {
+                setBirdeyeMarketData(marketDataResponse.data);
+                console.log('Birdeye market data loaded:', marketDataResponse.data);
+            } else {
+                console.log('No Birdeye market data available for this token');
+                setBirdeyeMarketData(null);
+            }
+        } catch (error: any) {
+            console.error('Error fetching Birdeye market data:', error);
+            setBirdeyeMarketData(null);
+        } finally {
+            setIsLoadingMarketData(false);
+        }
+    };
+
     const getCurrentPrice = () => {
+        // Use Birdeye price first (most accurate)
+        if (birdeyeMarketData?.price) {
+            return birdeyeMarketData.price;
+        }
+
         // Use highest liquidity pair's price if available
         if (tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0) {
             const sortedPairs = [...tokenPairs.pairs].sort((a, b) => b.liquidityUsd - a.liquidityUsd);
@@ -120,7 +149,12 @@ function WatchlistContent() {
     };
 
     const calculateMarketCap = () => {
-        // Market Cap = Total Supply × Current Price
+        // Use Birdeye market cap if available
+        if (birdeyeMarketData?.market_cap) {
+            return birdeyeMarketData.market_cap;
+        }
+
+        // Fallback: Market Cap = Total Supply × Current Price
         if (!tokenMetadata?.totalSupplyFormatted) return 0;
 
         const totalSupply = parseFloat(tokenMetadata.totalSupplyFormatted);
@@ -130,6 +164,11 @@ function WatchlistContent() {
     };
 
     const getFullyDilutedValue = () => {
+        // Use Birdeye FDV first (most accurate)
+        if (birdeyeMarketData?.fdv) {
+            return birdeyeMarketData.fdv;
+        }
+
         // Use the fullyDilutedValue from metadata if available
         if (tokenMetadata?.fullyDilutedValue) {
             return parseFloat(tokenMetadata.fullyDilutedValue);

@@ -12,6 +12,7 @@
     "dependencies": {
         "@sendgrid/mail": "^8.1.0",
         "@solana/web3.js": "^1.87.6",
+        "@types/ws": "^7.4.7",
         "axios": "^1.6.2",
         "bcryptjs": "^2.4.3",
         "cors": "^2.8.5",
@@ -27,6 +28,7 @@
         "pg": "^8.11.3",
         "tweetnacl": "^1.0.3",
         "uuid": "^9.0.1",
+        "ws": "^7.5.10",
         "zod": "^3.22.4"
     },
     "devDependencies": {

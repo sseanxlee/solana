@@ -1,11 +1,48 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { TokenService } from '../services/tokenService';
+import { BirdeyeService } from '../services/birdeyeService';
 
 const router = Router();
 const tokenService = new TokenService();
+const birdeyeService = BirdeyeService.getInstance();
 
 // Public token routes (no authentication required)
+
+// Get comprehensive market data from Birdeye
+router.get('/:address/market-data', async (req, res) => {
+    try {
+        const { address } = req.params;
+
+        if (!address) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token address is required'
+            });
+        }
+
+        const marketData = await birdeyeService.getTokenMarketData(address);
+
+        if (!marketData) {
+            return res.status(404).json({
+                success: false,
+                error: 'Market data not found for this token'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: marketData
+        });
+    } catch (error: any) {
+        console.error('Error fetching market data:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to fetch market data'
+        });
+    }
+});
+
 // Get token analytics
 router.get('/:address/analytics', async (req, res) => {
     try {

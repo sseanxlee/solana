@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { query } from '../config/database';
 import { TokenData, MoralisTokenData, JupiterPriceData, TokenPairsResponse, TokenMetadata, TokenAnalytics, TokenPairStats } from '../types';
+import { BirdeyeService, BirdeyeTokenMarketData } from './birdeyeService';
 
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY;
 const SOLANA_GATEWAY_URL = 'https://solana-gateway.moralis.io';
@@ -15,6 +16,8 @@ console.log('TokenService initialized with:', {
 });
 
 export class TokenService {
+    private birdeyeService = BirdeyeService.getInstance();
+
     async getTokenData(tokenAddress: string): Promise<TokenData | null> {
         try {
             // First check cache
@@ -23,6 +26,29 @@ export class TokenService {
                 return cachedData;
             }
 
+            // Try Birdeye first for comprehensive market data
+            const birdeyeData = await this.birdeyeService.getTokenMarketData(tokenAddress);
+            if (birdeyeData) {
+                // Create TokenData from Birdeye response
+                const tokenData: TokenData = {
+                    address: birdeyeData.address,
+                    name: 'Unknown Token', // Birdeye doesn't provide name/symbol, we'll get this from other sources
+                    symbol: 'UNKNOWN',
+                    price: birdeyeData.price,
+                    market_cap: birdeyeData.market_cap,
+                    last_updated: new Date(),
+                };
+
+                // Try to enrich with metadata from Moralis or Jupiter
+                const enrichedData = await this.enrichTokenData(tokenData, tokenAddress);
+
+                if (enrichedData) {
+                    await this.updateTokenCache(enrichedData);
+                    return enrichedData;
+                }
+            }
+
+            // Fallback to legacy method if Birdeye fails
             // Fetch from Moralis using correct endpoints
             let tokenData = await this.fetchFromMoralis(tokenAddress);
 
@@ -39,6 +65,63 @@ export class TokenService {
         } catch (error) {
             console.error('Error fetching token data:', error);
             return null;
+        }
+    }
+
+    private async enrichTokenData(baseData: TokenData, tokenAddress: string): Promise<TokenData | null> {
+        try {
+            // Try to get name and symbol from Moralis metadata
+            let enrichedData = { ...baseData };
+
+            if (MORALIS_API_KEY) {
+                try {
+                    const metadataResponse = await axios.get(
+                        `${SOLANA_GATEWAY_URL}/token/${SOLANA_CHAIN}/${tokenAddress}/metadata`,
+                        {
+                            headers: {
+                                'X-API-Key': MORALIS_API_KEY,
+                                'accept': 'application/json',
+                            },
+                            timeout: 5000,
+                        }
+                    );
+
+                    const metadata = metadataResponse.data;
+                    if (metadata.name) enrichedData.name = metadata.name;
+                    if (metadata.symbol) enrichedData.symbol = metadata.symbol;
+                } catch (error) {
+                    console.warn('Failed to enrich token data with Moralis metadata:', error);
+                }
+            }
+
+            // If still no name/symbol, try Jupiter as a last resort
+            if (enrichedData.name === 'Unknown Token' || enrichedData.symbol === 'UNKNOWN') {
+                try {
+                    const jupiterResponse = await axios.get(
+                        `https://price.jup.ag/v6/price?ids=${tokenAddress}`,
+                        { timeout: 5000 }
+                    );
+
+                    const jupiterData: JupiterPriceData = jupiterResponse.data;
+                    const tokenPrice = jupiterData.data[tokenAddress];
+
+                    if (tokenPrice?.mintSymbol) {
+                        if (enrichedData.name === 'Unknown Token') {
+                            enrichedData.name = tokenPrice.mintSymbol;
+                        }
+                        if (enrichedData.symbol === 'UNKNOWN') {
+                            enrichedData.symbol = tokenPrice.mintSymbol;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Failed to enrich token data with Jupiter:', error);
+                }
+            }
+
+            return enrichedData;
+        } catch (error) {
+            console.error('Error enriching token data:', error);
+            return baseData;
         }
     }
 

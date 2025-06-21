@@ -434,6 +434,18 @@ class ApiService {
         return this.request('GET', `/tokens/${tokenAddress}`);
     }
 
+    async getTokenMarketData(tokenAddress: string): Promise<ApiResponse<{
+        address: string;
+        price: number;
+        liquidity: number;
+        total_supply: number;
+        circulating_supply: number;
+        fdv: number;
+        market_cap: number;
+    }>> {
+        return this.request('GET', `/tokens/${tokenAddress}/market-data`);
+    }
+
     async searchTokens(query: string): Promise<ApiResponse<TokenData[]>> {
         if (USE_MORALIS_SEARCH) {
             console.log('Using Moralis API for token search');
