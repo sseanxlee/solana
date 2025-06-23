@@ -464,21 +464,59 @@ export class TokenService {
     }
 
     async getTokenMetadata(address: string): Promise<TokenMetadata> {
-        const response = await fetch(
-            `https://solana-gateway.moralis.io/token/mainnet/${address}/metadata`,
-            {
-                headers: {
-                    'X-API-Key': process.env.MORALIS_API_KEY || ''
+        try {
+            const response = await axios.get(
+                'https://public-api.birdeye.so/defi/v3/token/meta-data/single',
+                {
+                    params: {
+                        address: address
+                    },
+                    headers: {
+                        'X-API-KEY': process.env.BIRDEYE_API_KEY || '5e51a538dc184b669b532714a315ea2e',
+                        'accept': 'application/json',
+                        'x-chain': 'solana'
+                    },
+                    timeout: 10000,
                 }
+            );
+
+            // Birdeye returns data in a nested structure
+            if (response.data && response.data.success && response.data.data) {
+                const birdeyeData = response.data.data;
+
+                // Map Birdeye response to our TokenMetadata interface
+                return {
+                    mint: address,
+                    standard: 'spl-token',
+                    name: birdeyeData.name || 'Unknown Token',
+                    symbol: birdeyeData.symbol || 'UNKNOWN',
+                    logo: birdeyeData.logo_uri || '',
+                    decimals: (birdeyeData.decimals || 6).toString(),
+                    metaplex: {
+                        metadataUri: '',
+                        masterEdition: false,
+                        isMutable: false,
+                        sellerFeeBasisPoints: 0,
+                        updateAuthority: '',
+                        primarySaleHappened: 0
+                    },
+                    fullyDilutedValue: '0',
+                    totalSupply: '0',
+                    totalSupplyFormatted: '0',
+                    links: {
+                        moralis: `https://public-api.birdeye.so/defi/v3/token/meta-data/single?address=${address}`
+                    },
+                    description: birdeyeData.extensions?.description || null,
+                    isVerifiedContract: false,
+                    possibleSpam: false
+                };
             }
-        );
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch token metadata: ${response.statusText}`);
+            throw new Error('Invalid response from Birdeye API');
+        } catch (error) {
+            console.error('Error fetching token metadata from Birdeye:', error);
+            throw new Error(`Failed to fetch token metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        const data = await response.json();
-        return data;
     }
 
     async getTokenAnalytics(address: string): Promise<TokenAnalytics> {

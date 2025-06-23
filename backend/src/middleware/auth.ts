@@ -74,8 +74,8 @@ export const signIn = async (req: Request, res: Response) => {
         if (result.rows.length === 0) {
             // Create new user
             const insertResult = await query(
-                'INSERT INTO users (wallet_address) VALUES ($1) RETURNING *',
-                [walletAddress]
+                'INSERT INTO users (wallet_address, telegram_chat_id) VALUES ($1, $2) RETURNING *',
+                [walletAddress, null]
             );
             user = insertResult.rows[0];
         } else {

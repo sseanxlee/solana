@@ -1,11 +1,13 @@
 import { query } from '../config/database';
+import fs from 'fs';
+import path from 'path';
 
 const createTables = async () => {
-    try {
-        console.log('Starting database migration...');
+  try {
+    console.log('Starting database migration...');
 
-        // Create users table
-        await query(`
+    // Create users table
+    await query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         wallet_address VARCHAR(44) UNIQUE NOT NULL,
@@ -16,8 +18,8 @@ const createTables = async () => {
       );
     `);
 
-        // Create token_alerts table
-        await query(`
+    // Create token_alerts table
+    await query(`
       CREATE TABLE IF NOT EXISTS token_alerts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -36,8 +38,8 @@ const createTables = async () => {
       );
     `);
 
-        // Create token_data table for caching
-        await query(`
+    // Create token_data table for caching
+    await query(`
       CREATE TABLE IF NOT EXISTS token_data (
         address VARCHAR(44) PRIMARY KEY,
         name VARCHAR(255),
@@ -48,8 +50,8 @@ const createTables = async () => {
       );
     `);
 
-        // Create notification_queue table
-        await query(`
+    // Create notification_queue table
+    await query(`
       CREATE TABLE IF NOT EXISTS notification_queue (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         alert_id UUID REFERENCES token_alerts(id) ON DELETE CASCADE,
@@ -64,29 +66,29 @@ const createTables = async () => {
       );
     `);
 
-        // Create indexes for better performance
-        await query(`
+    // Create indexes for better performance
+    await query(`
       CREATE INDEX IF NOT EXISTS idx_users_wallet_address ON users(wallet_address);
     `);
 
-        await query(`
+    await query(`
       CREATE INDEX IF NOT EXISTS idx_token_alerts_user_id ON token_alerts(user_id);
     `);
 
-        await query(`
+    await query(`
       CREATE INDEX IF NOT EXISTS idx_token_alerts_token_address ON token_alerts(token_address);
     `);
 
-        await query(`
+    await query(`
       CREATE INDEX IF NOT EXISTS idx_token_alerts_active ON token_alerts(is_active) WHERE is_active = TRUE;
     `);
 
-        await query(`
+    await query(`
       CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status) WHERE status = 'pending';
     `);
 
-        // Create updated_at trigger function
-        await query(`
+    // Create updated_at trigger function
+    await query(`
       CREATE OR REPLACE FUNCTION update_updated_at_column()
       RETURNS TRIGGER AS $$
       BEGIN
@@ -96,39 +98,64 @@ const createTables = async () => {
       $$ language 'plpgsql';
     `);
 
-        // Create triggers for updated_at
-        await query(`
+    // Create triggers for updated_at
+    await query(`
       DROP TRIGGER IF EXISTS update_users_updated_at ON users;
       CREATE TRIGGER update_users_updated_at 
         BEFORE UPDATE ON users 
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     `);
 
-        await query(`
+    await query(`
       DROP TRIGGER IF EXISTS update_token_alerts_updated_at ON token_alerts;
       CREATE TRIGGER update_token_alerts_updated_at 
         BEFORE UPDATE ON token_alerts 
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     `);
 
-        console.log('Database migration completed successfully!');
-    } catch (error) {
-        console.error('Database migration failed:', error);
-        process.exit(1);
+    // Additional migration to remove NOT NULL constraint from telegram_chat_id
+    // This handles existing tables that might have the constraint
+    try {
+      await query('ALTER TABLE users ALTER COLUMN telegram_chat_id DROP NOT NULL;');
+      console.log('Successfully removed NOT NULL constraint from telegram_chat_id');
+    } catch (error: any) {
+      // This might fail if the constraint doesn't exist, which is fine
+      console.log('Note: Could not remove NOT NULL constraint (may not exist):', error.message);
     }
+
+    // Add new columns to token_alerts table for market cap functionality
+    try {
+      await query('ALTER TABLE token_alerts ADD COLUMN IF NOT EXISTS circulating_supply DECIMAL(30, 8);');
+      console.log('Successfully added circulating_supply column to token_alerts');
+    } catch (error: any) {
+      console.log('Note: Could not add circulating_supply column (may already exist):', error.message);
+    }
+
+    try {
+      await query('ALTER TABLE token_alerts ADD COLUMN IF NOT EXISTS current_market_cap DECIMAL(30, 2);');
+      console.log('Successfully added current_market_cap column to token_alerts');
+    } catch (error: any) {
+      console.log('Note: Could not add current_market_cap column (may already exist):', error.message);
+    }
+
+    console.log('Database migration completed successfully!');
+  } catch (error) {
+    console.error('Database migration failed:', error);
+    process.exit(1);
+  }
 };
 
 // Run migration if this file is executed directly
 if (require.main === module) {
-    createTables()
-        .then(() => {
-            console.log('Migration finished. Exiting...');
-            process.exit(0);
-        })
-        .catch((error) => {
-            console.error('Migration error:', error);
-            process.exit(1);
-        });
+  createTables()
+    .then(() => {
+      console.log('Migration finished. Exiting...');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('Migration error:', error);
+      process.exit(1);
+    });
 }
 
 export { createTables }; 

@@ -128,7 +128,8 @@ export class NotificationService {
                 return false;
             }
 
-            const success = await this.telegramBotService.sendAlertNotification(chatId, message);
+            await this.telegramBotService.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+            const success = true;
 
             if (success) {
                 await this.updateQueueStatus(queueId, 'sent');
@@ -333,10 +334,8 @@ This alert has been automatically disabled and won't trigger again unless you re
 
     private async sendQueuedTelegram(notification: NotificationQueue): Promise<boolean> {
         try {
-            return await this.telegramBotService.sendAlertNotification(
-                notification.recipient,
-                notification.message
-            );
+            await this.telegramBotService.sendMessage(notification.recipient, notification.message, { parse_mode: 'Markdown' });
+            return true;
         } catch (error) {
             console.error('Error sending queued Telegram message:', error);
             return false;

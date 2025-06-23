@@ -10,6 +10,7 @@ import alertRoutes from './routes/alerts';
 import tokenRoutes from './routes/tokens';
 import { TelegramBotService } from './services/telegramBotService';
 import { SolanaStreamingService } from './services/solanaStreamingService';
+import { SolPriceService } from './services/solPriceService';
 
 // Load environment variables
 dotenv.config();
@@ -20,6 +21,7 @@ const PORT = process.env.API_PORT || 3001;
 // Initialize services (singletons)
 const telegramBotService = TelegramBotService.getInstance();
 const solanaStreamingService = SolanaStreamingService.getInstance();
+const solPriceService = SolPriceService.getInstance();
 
 // Setup integration between services
 console.log('[STRIDE] Setting up service integration...');
@@ -131,6 +133,7 @@ const gracefulShutdown = (signal: string) => {
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
     telegramBotService.stop();
+    solPriceService.stopPriceUpdates();
 
     process.exit(0);
 };

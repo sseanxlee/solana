@@ -2,8 +2,8 @@ import axios, { AxiosResponse } from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-// Moralis API Configuration (Premium Feature)
-const MORALIS_API_KEY = process.env.NEXT_PUBLIC_MORALIS_API_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IjEzZTBhZmU0LTFjZjktNGI2MC1iMTQ5LTkxYjhmMjc0ZjQwYyIsIm9yZ0lkIjoiNDU0MTk2IiwidXNlcklkIjoiNDY3MzA4IiwidHlwZUlkIjoiN2JmMGFkMmEtNTkyMS00ZGNiLWIzNzYtZGVlODBmMDQyOTRjIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTAwNTUyMDcsImV4cCI6NDkwNTgxNTIwN30.lHFaJeZjoWCbGtOt7qLY9IHaGYlUIFw8k44UhymkElk';
+// Legacy Moralis API Configuration (Deprecated - use backend endpoints instead)
+const MORALIS_API_KEY = process.env.NEXT_PUBLIC_MORALIS_API_KEY;
 const USE_MORALIS_SEARCH = process.env.NEXT_PUBLIC_USE_MORALIS_SEARCH === 'true' || false;
 
 console.log('API Service initialized with base URL:', API_BASE_URL);
@@ -548,6 +548,13 @@ class ApiService {
 
     private async searchTokensMoralis(params: MoralisSearchParams): Promise<ApiResponse<TokenData[]>> {
         try {
+            if (!MORALIS_API_KEY) {
+                return {
+                    success: false,
+                    error: 'Moralis API key not configured'
+                };
+            }
+
             const searchParams = new URLSearchParams({
                 query: params.query,
                 chains: params.chains || 'solana',
