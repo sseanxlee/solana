@@ -15,12 +15,26 @@ router.use(authenticateToken);
 // GET /alerts - Get user's alerts
 router.get('/', async (req: AuthRequest, res: Response) => {
     try {
-        const result = await query(
-            `SELECT * FROM token_alerts 
+        let result;
+
+        // If user has telegram_chat_id, get alerts from both the wallet-based user and telegram-based user
+        if (req.user!.telegram_chat_id) {
+            result = await query(
+                `SELECT DISTINCT ta.* FROM token_alerts ta
+                 JOIN users u ON ta.user_id = u.id 
+                 WHERE (ta.user_id = $1 OR u.telegram_chat_id = $2)
+                 ORDER BY ta.created_at DESC`,
+                [req.user!.id, req.user!.telegram_chat_id]
+            );
+        } else {
+            // If no telegram linked, just get wallet-based alerts
+            result = await query(
+                `SELECT * FROM token_alerts 
        WHERE user_id = $1 
        ORDER BY created_at DESC`,
-            [req.user!.id]
-        );
+                [req.user!.id]
+            );
+        }
 
         const alerts = result.rows as TokenAlert[];
 

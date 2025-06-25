@@ -75,6 +75,9 @@ export class TelegramBotService {
             // Start polling exactly like simple-bot.js does it
             this.bot.startPolling();
 
+            // Resume monitoring for existing alerts
+            await this.resumeMonitoringForExistingAlerts();
+
             console.log('Telegram bot started successfully');
             console.log('Bot info: @stridesol_bot');
         } catch (error) {
@@ -108,16 +111,8 @@ export class TelegramBotService {
                 { command: 'setalert', description: 'Set market cap alert for a token' },
                 { command: 'stopalert', description: 'Stop market cap monitoring' },
                 { command: 'alertstatus', description: 'Check current alert status' },
-                { command: 'prices', description: 'Show current SOL price and prices for tracked tokens' },
-                { command: 'watchlist', description: 'View your token watchlist (coming soon)' },
-                { command: 'addtoken', description: 'Add token to watchlist (coming soon)' },
-                { command: 'removetoken', description: 'Remove token from watchlist (coming soon)' },
-                { command: 'alerts', description: 'View your price alerts (coming soon)' },
-                { command: 'removealert', description: 'Remove a price alert (coming soon)' },
-                { command: 'portfolio', description: 'View portfolio summary (coming soon)' },
-                { command: 'price', description: 'Get current token price (coming soon)' },
-                { command: 'trending', description: 'See trending tokens (coming soon)' },
-                { command: 'settings', description: 'Configure preferences (coming soon)' }
+                { command: 'clearalerts', description: 'Clear all your active alerts' },
+                { command: 'prices', description: 'Show current SOL price and prices for tracked tokens' }
             ];
 
             await this.bot.setMyCommands(commands);
@@ -130,11 +125,73 @@ export class TelegramBotService {
     private setupCommandHandlers(): void {
         if (!this.bot) return;
 
-        // Start command - just respond with hello
-        this.bot.onText(/\/start/, async (msg) => {
+        // Start command - handle auto-linking from web app
+        this.bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
             const chatId = msg.chat.id.toString();
             const username = msg.from?.username || msg.from?.first_name || 'there';
+            const startParam = match?.[1]; // Wallet address from deep link
 
+            // If user came from the web app with wallet address, auto-link
+            if (startParam && startParam.length === 44) {
+                try {
+                    // Check if this wallet exists in our system
+                    const walletResult = await query(
+                        'SELECT id FROM users WHERE wallet_address = $1',
+                        [startParam]
+                    );
+
+                    if (walletResult.rows.length > 0) {
+                        // Check if this Telegram account is already linked
+                        const existingResult = await query(
+                            'SELECT wallet_address FROM users WHERE telegram_chat_id = $1',
+                            [chatId]
+                        );
+
+                        if (existingResult.rows.length === 0) {
+                            // Link the accounts automatically
+                            await query(
+                                'UPDATE users SET telegram_chat_id = $1 WHERE wallet_address = $2',
+                                [chatId, startParam]
+                            );
+
+                            const shortAddress = `${startParam.slice(0, 6)}...${startParam.slice(-6)}`;
+                            const linkedMessage = `
+*🎉 Welcome to Solana Token Alerts Bot!*
+
+Hello ${username}!
+
+✅ *Auto-linked successfully!*
+Your Telegram account is now connected to wallet: \`${shortAddress}\`
+
+Your alerts will sync between the Telegram bot and web app!
+
+🚀 *Get Started:*
+• Send any Solana token address to get detailed info
+• Type /help to see all available commands
+• Create market cap alerts with simple commands
+
+Let's start tracking some tokens!
+                            `;
+
+                            await this.sendMessage(chatId, linkedMessage, { parse_mode: 'Markdown' });
+                            console.log(`[TELEGRAM] Auto-linked user ${chatId} to wallet ${startParam}`);
+                            return;
+                        } else {
+                            const existingWallet = existingResult.rows[0].wallet_address;
+                            if (existingWallet !== startParam) {
+                                const shortExisting = `${existingWallet.slice(0, 6)}...${existingWallet.slice(-6)}`;
+                                const shortNew = `${startParam.slice(0, 6)}...${startParam.slice(-6)}`;
+                                await this.sendMessage(chatId, `❌ *Account Already Linked*\n\nYour Telegram account is already linked to wallet: \`${shortExisting}\`\n\nCannot link to: \`${shortNew}\``, { parse_mode: 'Markdown' });
+                                return;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error in auto-linking:', error);
+                }
+            }
+
+            // Standard welcome message
             const welcomeMessage = `
 *Welcome to Solana Token Alerts Bot*
 
@@ -142,7 +199,10 @@ Hello ${username}!
 
 I'm here to help you track Solana tokens, set price alerts, and manage your watchlist.
 
-Type /help to see all available commands.
+🚀 *Get Started:*
+• Send any Solana token address to get detailed info
+• Type /help to see all available commands
+• Create market cap alerts with simple commands
 
 Let's get started!
             `;
@@ -169,17 +229,9 @@ Send any Solana token address to get detailed info
 /setalert - Set market cap alert for a token
 /stopalert - Stop market cap monitoring
 /alertstatus - Check current alert status
+/clearalerts - Clear all your active alerts
 
-*Coming Soon:*
-/watchlist - View your token watchlist
-/addtoken - Add token to watchlist
-/removetoken - Remove token from watchlist
-/alerts - View your price alerts
-/removealert - Remove a price alert
-/portfolio - View your portfolio summary
-/price - Get current price of a token
-/trending - See trending tokens
-/settings - Configure notification preferences
+*Note:* To sync alerts with our web app, access this bot through the Integrations page after signing in with your wallet.
 
 Stay tuned for more features!
             `;
@@ -365,6 +417,20 @@ Stay tuned for more features!
                     show_alert: true
                 });
 
+            } else if (data.startsWith('back_')) {
+                const alertId = data.replace('back_', '');
+
+                await this.bot?.answerCallbackQuery(callbackQuery.id, {
+                    text: 'Going back...',
+                    show_alert: false
+                });
+
+                // Clear any pending alert state
+                this.pendingAlerts.delete(chatId);
+
+                // Show the main alert type selection screen
+                await this.showAlertTypeSelection(chatId, messageId, alertId);
+
             } else if (data.startsWith('settings_')) {
                 // Placeholder for Settings functionality
                 await this.bot?.answerCallbackQuery(callbackQuery.id, {
@@ -507,37 +573,74 @@ Choose alert type:`;
         // Handle /alertstatus command
         this.bot.onText(/\/alertstatus/, async (msg) => {
             const chatId = msg.chat.id.toString();
-            const isMonitoring = this.streamingService.isMonitoring();
-            const currentToken = this.streamingService.getCurrentToken();
 
-            if (!isMonitoring || !currentToken) {
-                await this.sendMessage(chatId, '📊 *Alert Status*\n\nNo active alerts.', { parse_mode: 'Markdown' });
-                return;
+            try {
+                // Query database for user's active alerts
+                const alertsResult = await query(`
+                    SELECT ta.*, ta.token_address, ta.token_name, ta.token_symbol, ta.threshold_value, ta.threshold_type, ta.condition
+                    FROM token_alerts ta
+                    JOIN users u ON ta.user_id = u.id 
+                    WHERE ta.is_active = true AND ta.is_triggered = false 
+                    AND u.telegram_chat_id = $1
+                    ORDER BY ta.created_at DESC
+                `, [chatId]);
+
+                if (alertsResult.rows.length === 0) {
+                    await this.sendMessage(chatId, '📊 *Alert Status*\n\nNo active alerts.', { parse_mode: 'Markdown' });
+                    return;
+                }
+
+                let statusMessage = '📊 *Alert Status*\n\n';
+
+                // Group alerts by token
+                const alertsByToken = new Map();
+                for (const alert of alertsResult.rows) {
+                    const key = alert.token_address;
+                    if (!alertsByToken.has(key)) {
+                        alertsByToken.set(key, {
+                            name: alert.token_name,
+                            symbol: alert.token_symbol,
+                            address: alert.token_address,
+                            alerts: []
+                        });
+                    }
+                    alertsByToken.get(key).alerts.push(alert);
+                }
+
+                for (const [tokenAddress, tokenData] of alertsByToken) {
+                    const shortAddress = `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-6)}`;
+                    statusMessage += `🪙 *${tokenData.name}* ($${tokenData.symbol})\n`;
+                    statusMessage += `Address: \`${shortAddress}\`\n`;
+                    statusMessage += `Active Alerts: ${tokenData.alerts.length}\n\n`;
+
+                    for (const alert of tokenData.alerts) {
+                        if (alert.threshold_type === 'market_cap') {
+                            statusMessage += `• Market Cap ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
+                        } else if (alert.threshold_type === 'price_percentage') {
+                            statusMessage += `• Price ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
+                        } else if (alert.threshold_type === 'price') {
+                            statusMessage += `• Price ${alert.condition} ${this.formatPrice(alert.threshold_value)}\n`;
+                        }
+                    }
+                    statusMessage += '\n';
+                }
+
+                const isMonitoring = this.streamingService.isMonitoring();
+                const currentToken = this.streamingService.getCurrentToken();
+
+                statusMessage += `\n📡 *System Status*\n`;
+                statusMessage += `Monitoring: ${isMonitoring ? '🟢 Active' : '🔴 Inactive'}\n`;
+                if (currentToken) {
+                    const shortCurrentToken = `${currentToken.slice(0, 6)}...${currentToken.slice(-6)}`;
+                    statusMessage += `Current Token: \`${shortCurrentToken}\`\n`;
+                }
+
+                await this.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
+
+            } catch (error) {
+                console.error('Error in /alertstatus command:', error);
+                await this.sendMessage(chatId, '❌ Error fetching alert status. Please try again later.');
             }
-
-            const tokenData = this.tokenAlerts.get(currentToken);
-            if (!tokenData) {
-                await this.sendMessage(chatId, '📊 *Alert Status*\n\nMonitoring active but no token data found.', { parse_mode: 'Markdown' });
-                return;
-            }
-
-            const currentMarketCap = await this.calculateMarketCap(tokenData.lastPrice, tokenData.circulatingSupply);
-
-            const statusMessage = `
-📊 *Alert Status*
-
-Token: *${tokenData.name}* ($${tokenData.symbol})
-Address: \`${currentToken.slice(0, 8)}...${currentToken.slice(-8)}\`
-
-Current Market Cap: *${this.formatLargeNumber(currentMarketCap)}*
-Current Price: *$${this.formatPrice(tokenData.lastPrice)}*
-Circulating Supply: *${this.formatLargeNumber(tokenData.circulatingSupply)}*
-
-Status: 🟢 Active
-Monitoring Users: ${this.getMonitoringUsers().length}
-            `.trim();
-
-            await this.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
         });
 
         // Handle /prices command
@@ -548,13 +651,21 @@ Monitoring Users: ${this.getMonitoringUsers().length}
                 // Get SOL price
                 const solPrice = await this.getSolPrice();
 
-                // Get all unique token addresses with active alerts
+                // Get all unique token addresses with active alerts for this user
                 const alertsResult = await query(`
-                    SELECT DISTINCT token_address, token_name, token_symbol
-                    FROM token_alerts 
-                    WHERE is_active = true AND is_triggered = false
-                    ORDER BY token_name
-                `);
+                    SELECT DISTINCT ta.token_address, ta.token_name, ta.token_symbol
+                    FROM token_alerts ta
+                    JOIN users u ON ta.user_id = u.id 
+                    WHERE ta.is_active = true AND ta.is_triggered = false 
+                    AND u.telegram_chat_id = $1
+                    ORDER BY ta.token_name
+                `, [chatId]);
+
+                // Debug logging
+                console.log(`[PRICES] User ${chatId} requested prices, found ${alertsResult.rows.length} tokens with active alerts:`);
+                alertsResult.rows.forEach((row, index) => {
+                    console.log(`[PRICES] ${index + 1}. ${row.token_name} (${row.token_symbol}) - ${row.token_address}`);
+                });
 
                 let pricesMessage = `💰 *Current Prices*\n\n🟣 *Solana (SOL)*: *$${this.formatPrice(solPrice)}*\n\n`;
 
@@ -603,13 +714,26 @@ Monitoring Users: ${this.getMonitoringUsers().length}
             }
         });
 
+        // Handle /clearalerts command (for cleanup/debugging)
+        this.bot.onText(/\/clearalerts/, async (msg) => {
+            const chatId = msg.chat.id.toString();
+
+            try {
+                await this.cleanupUserAlerts(chatId);
+                await this.sendMessage(chatId, '✅ *All your alerts have been cleared*\n\nYou can now set new alerts by sending a token address.', { parse_mode: 'Markdown' });
+            } catch (error) {
+                console.error('Error in /clearalerts command:', error);
+                await this.sendMessage(chatId, '❌ Error clearing alerts. Please try again later.');
+            }
+        });
+
         // Handle any other message
         this.bot.on('message', async (msg) => {
             const text = msg.text;
             const chatId = msg.chat.id.toString();
 
             // Skip if it's a command we already handle
-            if (text?.startsWith('/start') || text?.startsWith('/help') || text?.startsWith('/setalert') || text?.startsWith('/stopalert') || text?.startsWith('/alertstatus') || text?.startsWith('/prices')) {
+            if (text?.startsWith('/start') || text?.startsWith('/help') || text?.startsWith('/setalert') || text?.startsWith('/stopalert') || text?.startsWith('/alertstatus') || text?.startsWith('/clearalerts') || text?.startsWith('/prices')) {
                 return;
             }
 
@@ -642,8 +766,7 @@ Monitoring Users: ${this.getMonitoringUsers().length}
                 return;
             }
 
-            // Don't send "Hi there" message for unrecognized input - just ignore
-            // This prevents unwanted messages during alert setup flows
+
         });
     }
 
@@ -931,13 +1054,38 @@ FDV: *${fdv}*
         tokenData.lastPrice = newPrice;
         this.tokenAlerts.set(tokenAddress, tokenData);
 
+        // Get current global SOL price
+        const solPriceUSD = this.solPriceService.getSolPriceUSD();
+
         // Calculate new market cap using the correct formula: circulating_supply * sol_price_usd * quote_price
         const newMarketCap = this.solPriceService.calculateMarketCap(tokenData.circulatingSupply, newPrice);
+
+        // Display market cap calculation in terminal with clear formatting
+        console.log('═'.repeat(80));
+        console.log('📊 MARKET CAP CALCULATION - PRICE PING');
+        console.log('═'.repeat(80));
+        console.log(`Token: ${tokenData.name} (${tokenData.symbol})`);
+        console.log(`Address: ${tokenAddress}`);
+        console.log('');
+        console.log('Market Cap Formula: circulating_supply × sol_price_usd × quote_price');
+        console.log(`Circulating Supply: ${tokenData.circulatingSupply.toLocaleString()}`);
+        console.log(`SOL Price (USD): $${solPriceUSD.toFixed(8)}`);
+        console.log(`Quote Price (SOL): ${newPrice.toFixed(8)}`);
+        console.log(`Token Price (USD): $${(newPrice * solPriceUSD).toFixed(8)}`);
+        console.log('');
+        console.log(`Calculation: ${tokenData.circulatingSupply.toLocaleString()} × ${solPriceUSD.toFixed(8)} × ${newPrice.toFixed(8)}`);
+        console.log(`Market Cap: $${newMarketCap.toLocaleString()}`);
+        console.log('');
+        console.log(`Swap Type: ${swap.swapType.toUpperCase()}`);
+        console.log(`Amount: ${parseFloat(swap.baseAmount).toLocaleString()}`);
+        console.log(`Exchange: ${swap.sourceExchange || 'Unknown'}`);
+        console.log(`Time: ${new Date(blockTime * 1000).toLocaleString()}`);
+        console.log(`Tx: ${signature}`);
+        console.log('═'.repeat(80));
 
         // Check for triggered alerts
         await this.checkAndTriggerAlerts(tokenAddress, newPrice, newMarketCap);
 
-        const solPriceUSD = this.solPriceService.getSolPriceUSD();
         const tokenPriceUSD = newPrice * solPriceUSD;
 
         const message = `
@@ -1061,6 +1209,104 @@ Time: ${new Date().toLocaleString()}
         return tokenPriceUsd * circulatingSupply;
     }
 
+    // Show main alert type selection screen
+    private async showAlertTypeSelection(chatId: string, messageId: number, alertId: string): Promise<void> {
+        const tokenData = this.getTokenForAlert(alertId);
+
+        if (!tokenData) {
+            await this.bot?.editMessageText('❌ Alert expired. Please try again.', {
+                chat_id: chatId,
+                message_id: messageId
+            });
+            return;
+        }
+
+        try {
+            // Fetch fresh token data
+            const [marketData, metadata] = await Promise.allSettled([
+                this.birdeyeService.getTokenMarketData(tokenData.address),
+                this.fetchTokenMetadata(tokenData.address)
+            ]);
+
+            let birdeyeData: BirdeyeTokenMarketData | null = null;
+            let tokenMetadata: any = null;
+
+            if (marketData.status === 'fulfilled' && marketData.value) {
+                birdeyeData = marketData.value;
+            }
+
+            if (metadata.status === 'fulfilled' && metadata.value) {
+                tokenMetadata = metadata.value;
+            }
+
+            if (!birdeyeData) {
+                await this.bot?.editMessageText('❌ Unable to fetch current token data. Please try again.', {
+                    chat_id: chatId,
+                    message_id: messageId
+                });
+                return;
+            }
+
+            const tokenName = tokenMetadata?.name || tokenData.name;
+            const tokenSymbol = tokenMetadata?.symbol || tokenData.symbol;
+            const currentMarketCap = birdeyeData.market_cap;
+            const currentPriceUSD = birdeyeData.price * await this.getSolPrice();
+
+            const alertTypeMessage = `🚨 *Set Price Alert*
+
+Token: *${tokenName}* ($${tokenSymbol})
+Address: \`${tokenData.address.slice(0, 8)}...${tokenData.address.slice(-8)}\`
+
+Current Price: *$${this.formatPrice(currentPriceUSD)}*
+Current Market Cap: *${this.formatLargeNumber(currentMarketCap)}*
+
+Choose alert type:`;
+
+            const keyboard = {
+                inline_keyboard: [
+                    [
+                        {
+                            text: '📊 Market Cap Alert',
+                            callback_data: `mcap_${alertId}`
+                        }
+                    ],
+                    [
+                        {
+                            text: '📈 Market Cap Increase Alert',
+                            callback_data: `pinc_${alertId}`
+                        }
+                    ],
+                    [
+                        {
+                            text: '📉 Market Cap Decrease Alert',
+                            callback_data: `pdec_${alertId}`
+                        }
+                    ],
+                    [
+                        {
+                            text: '❌ Cancel',
+                            callback_data: `cancel_${alertId}`
+                        }
+                    ]
+                ]
+            };
+
+            await this.bot?.editMessageText(alertTypeMessage, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
+
+        } catch (error) {
+            console.error('Error showing alert type selection:', error);
+            await this.bot?.editMessageText('❌ Error loading alert options. Please try again.', {
+                chat_id: chatId,
+                message_id: messageId
+            });
+        }
+    }
+
     // Handle market cap alert setup
     private async handleMarketCapAlertSetup(chatId: string, messageId: number, tokenAddress: string): Promise<void> {
         const message = `💰 *Market Cap Alert Setup*
@@ -1109,9 +1355,12 @@ Select the percentage increase or type a custom percentage (e.g., "25%" or "150%
             buttons.push(row);
         }
 
-        // Add Edit Presets and Cancel buttons
+        // Add Edit Presets, Back, and Cancel buttons
         buttons.push([
-            { text: '⚙️ Edit Presets', callback_data: `edit_presets_increase_${alertId}` },
+            { text: '⚙️ Edit Presets', callback_data: `edit_presets_increase_${alertId}` }
+        ]);
+        buttons.push([
+            { text: '⬅️ Back', callback_data: `back_${alertId}` },
             { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
         ]);
 
@@ -1153,9 +1402,12 @@ Select the percentage decrease or type a custom percentage (e.g., "25%" or "80%"
             buttons.push(row);
         }
 
-        // Add Edit Presets and Cancel buttons
+        // Add Edit Presets, Back, and Cancel buttons
         buttons.push([
-            { text: '⚙️ Edit Presets', callback_data: `edit_presets_decrease_${alertId}` },
+            { text: '⚙️ Edit Presets', callback_data: `edit_presets_decrease_${alertId}` }
+        ]);
+        buttons.push([
+            { text: '⬅️ Back', callback_data: `back_${alertId}` },
             { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
         ]);
 
@@ -1333,6 +1585,91 @@ You'll be notified when the market cap goes ${condition} your target!`;
         }
     }
 
+    // Resume monitoring for existing alerts on startup
+    private async resumeMonitoringForExistingAlerts(): Promise<void> {
+        try {
+            // Get all active alerts from database
+            const alertsResult = await query(`
+                SELECT DISTINCT token_address, token_name, token_symbol
+                FROM token_alerts 
+                WHERE is_active = true AND is_triggered = false
+                ORDER BY created_at ASC
+                LIMIT 1
+            `);
+
+            if (alertsResult.rows.length > 0) {
+                const tokenToMonitor = alertsResult.rows[0];
+                console.log(`[STARTUP] Resuming monitoring for: ${tokenToMonitor.token_name} (${tokenToMonitor.token_symbol}) - ${tokenToMonitor.token_address}`);
+
+                // Start monitoring the first token found with active alerts
+                await this.startMonitoringIfNeeded(tokenToMonitor.token_address);
+
+                console.log(`[STARTUP] Successfully resumed monitoring for ${tokenToMonitor.token_name}`);
+            } else {
+                console.log('[STARTUP] No active alerts found - monitoring not started');
+            }
+        } catch (error) {
+            console.error('[STARTUP] Error resuming monitoring for existing alerts:', error);
+        }
+    }
+
+    // Clean up alerts for a specific user (for debugging/maintenance)
+    public async cleanupUserAlerts(chatId: string): Promise<void> {
+        try {
+            console.log(`[CLEANUP] Removing all alerts for user ${chatId}...`);
+
+            // Get alerts before deletion for logging
+            const alertsResult = await query(`
+                SELECT ta.id, ta.token_address, ta.token_name, ta.token_symbol, ta.threshold_type, ta.threshold_value
+                FROM token_alerts ta
+                JOIN users u ON ta.user_id = u.id 
+                WHERE u.telegram_chat_id = $1 AND ta.is_active = true
+            `, [chatId]);
+
+            if (alertsResult.rows.length === 0) {
+                console.log(`[CLEANUP] No active alerts found for user ${chatId}`);
+                return;
+            }
+
+            console.log(`[CLEANUP] Found ${alertsResult.rows.length} alerts to remove:`);
+            alertsResult.rows.forEach((alert, index) => {
+                console.log(`[CLEANUP] ${index + 1}. ${alert.token_name} (${alert.token_symbol}) - ${alert.threshold_type}: ${alert.threshold_value}`);
+            });
+
+            // Delete all alerts for this user
+            const deleteResult = await query(`
+                UPDATE token_alerts 
+                SET is_active = false, is_triggered = true 
+                WHERE id IN (
+                    SELECT ta.id 
+                    FROM token_alerts ta 
+                    JOIN users u ON ta.user_id = u.id 
+                    WHERE u.telegram_chat_id = $1 AND ta.is_active = true
+                )
+            `, [chatId]);
+
+            console.log(`[CLEANUP] Successfully deactivated ${deleteResult.rowCount} alerts for user ${chatId}`);
+
+            // Check if there are any remaining active alerts
+            const remainingAlerts = await query(`
+                SELECT COUNT(*) as count
+                FROM token_alerts 
+                WHERE is_active = true AND is_triggered = false
+            `);
+
+            const remainingCount = parseInt(remainingAlerts.rows[0].count);
+            console.log(`[CLEANUP] Remaining active alerts across all users: ${remainingCount}`);
+
+            if (remainingCount === 0) {
+                console.log('[CLEANUP] No more active alerts - stopping monitoring');
+                await this.streamingService.stopMonitoring();
+            }
+
+        } catch (error) {
+            console.error(`[CLEANUP] Error cleaning up alerts for user ${chatId}:`, error);
+        }
+    }
+
     // Start monitoring if needed
     private async startMonitoringIfNeeded(tokenAddress: string): Promise<void> {
         if (!this.streamingService.isMonitoring() || this.streamingService.getCurrentToken() !== tokenAddress) {
@@ -1480,7 +1817,8 @@ You'll be notified when the price goes ${condition} your target!`;
             }
 
             const circulatingSupply = birdeyeData.circulating_supply || birdeyeData.total_supply;
-            const currentMarketCap = await this.calculateMarketCap(birdeyeData.price, circulatingSupply);
+            // Use Birdeye's direct market cap (already in USD) - same as /setalert command
+            const currentMarketCap = birdeyeData.market_cap;
             const condition = targetMarketCap > currentMarketCap ? 'above' : 'below';
 
             // Create alert in database
@@ -1522,6 +1860,8 @@ You'll be notified when the market cap goes ${condition} your target!`;
                 WHERE ta.token_address = $1 AND ta.is_active = true AND ta.is_triggered = false
             `, [tokenAddress]);
 
+            let alertsTriggered = false;
+
             for (const alert of alerts.rows) {
                 let shouldTrigger = false;
                 let currentValue = 0;
@@ -1547,6 +1887,8 @@ You'll be notified when the market cap goes ${condition} your target!`;
                 }
 
                 if (shouldTrigger) {
+                    alertsTriggered = true;
+
                     // Mark alert as triggered
                     await query(`
                         UPDATE token_alerts 
@@ -1576,6 +1918,11 @@ Condition: *${alert.condition.toUpperCase()}*
                     console.log('═'.repeat(80));
                 }
             }
+
+            // If any alerts were triggered, check if we should stop monitoring this token
+            if (alertsTriggered) {
+                await this.checkAndUpdateMonitoring(tokenAddress);
+            }
         } catch (error) {
             console.error('Error checking and triggering alerts:', error);
         }
@@ -1602,6 +1949,63 @@ Condition: *${alert.condition.toUpperCase()}*
 
     private clearTokenForAlert(alertId: string): void {
         this.alertTokenMap.delete(alertId);
+    }
+
+    // Check if we should continue monitoring a token after alerts are triggered
+    private async checkAndUpdateMonitoring(triggeredTokenAddress: string): Promise<void> {
+        try {
+            // Check if there are any remaining active alerts for this token
+            const remainingAlertsForToken = await query(`
+                SELECT COUNT(*) as count 
+                FROM token_alerts 
+                WHERE token_address = $1 AND is_active = true AND is_triggered = false
+            `, [triggeredTokenAddress]);
+
+            const remainingCount = parseInt(remainingAlertsForToken.rows[0].count);
+
+            if (remainingCount > 0) {
+                console.log(`Token ${triggeredTokenAddress.slice(0, 8)}... still has ${remainingCount} active alerts. Continuing monitoring.`);
+                return;
+            }
+
+            // No more alerts for this token, remove it from our alerts map
+            this.tokenAlerts.delete(triggeredTokenAddress);
+
+            console.log('═'.repeat(80));
+            console.log(`🔄 TOKEN MONITORING UPDATE`);
+            console.log(`No more active alerts for token: ${triggeredTokenAddress.slice(0, 8)}...`);
+            console.log('Checking for other tokens to monitor...');
+
+            // Get all other tokens that still have active alerts
+            const otherActiveTokens = await query(`
+                SELECT DISTINCT token_address, token_name, token_symbol
+                FROM token_alerts 
+                WHERE is_active = true AND is_triggered = false AND token_address != $1
+            `, [triggeredTokenAddress]);
+
+            if (otherActiveTokens.rows.length > 0) {
+                // Switch to monitoring the first available token with active alerts
+                const nextToken = otherActiveTokens.rows[0];
+                console.log(`Switching monitoring to: ${nextToken.token_name} (${nextToken.token_symbol})`);
+                console.log(`Address: ${nextToken.token_address}`);
+
+                // Start monitoring the new token and get its data
+                await this.startMonitoringIfNeeded(nextToken.token_address);
+
+                console.log(`Now monitoring ${otherActiveTokens.rows.length} tokens with active alerts`);
+            } else {
+                // No other tokens have active alerts, stop monitoring entirely
+                console.log('No other tokens have active alerts. Stopping websocket monitoring.');
+                await this.streamingService.stopMonitoring();
+
+                // Clear all monitoring users since no tokens are being monitored
+                this.monitoringUsers.clear();
+            }
+            console.log('═'.repeat(80));
+
+        } catch (error) {
+            console.error('Error updating monitoring after alert trigger:', error);
+        }
     }
 
     // User preset management
