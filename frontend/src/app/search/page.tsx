@@ -4,10 +4,14 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService, TokenPairsResponse, TokenMetadata } from '../../services/api';
+import { tokenCacheService } from '../../services/tokenCache';
+import { followedTokensService } from '../../services/followedTokens';
 import toast from 'react-hot-toast';
 import { CurrencyDollarIcon } from '@heroicons/react/24/outline';
 import DashboardLayout from '../../components/DashboardLayout';
 import { PriceChartWidget } from '../../components/PriceChartWidget';
+import TokenLogo from '../../components/TokenLogo';
+import CreateAlertForm from '../../components/CreateAlertForm';
 
 interface TokenData {
     address: string;
@@ -31,6 +35,8 @@ function WatchlistContent() {
     const [isLoadingPairs, setIsLoadingPairs] = useState(false);
     const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
     const [isLoadingMarketData, setIsLoadingMarketData] = useState(false);
+
+    const [isFollowed, setIsFollowed] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
@@ -58,6 +64,9 @@ function WatchlistContent() {
             if (response.success && response.data && response.data.length > 0) {
                 const tokenResult = response.data[0];
                 setTokenData(tokenResult);
+
+                // Check if token is followed
+                setIsFollowed(followedTokensService.isTokenFollowed(tokenAddress));
 
                 // Fetch pairs, metadata, and market data in parallel
                 fetchTokenPairs(tokenAddress);
@@ -95,11 +104,20 @@ function WatchlistContent() {
 
     const fetchTokenMetadata = async (tokenAddress: string) => {
         try {
+            // Check cache first
+            const cachedToken = tokenCacheService.getCachedToken(tokenAddress);
+            if (cachedToken) {
+                setTokenMetadata(cachedToken);
+                return;
+            }
+
             setIsLoadingMetadata(true);
             const metadataResponse = await apiService.getTokenMetadata(tokenAddress);
 
             if (metadataResponse.success && metadataResponse.data) {
                 setTokenMetadata(metadataResponse.data);
+                // Cache the token metadata
+                tokenCacheService.cacheToken(tokenAddress, metadataResponse.data);
             } else {
                 console.log('No metadata available for this token');
                 setTokenMetadata(null);
@@ -208,6 +226,35 @@ function WatchlistContent() {
         return `$${marketCap.toFixed(2)}`;
     };
 
+    const handleAlertCreated = (alert: any) => {
+        toast.success('Alert created successfully!');
+        // Optionally refresh alerts or show success message
+    };
+
+    const handleFollowToggle = () => {
+        if (!tokenData) return;
+
+        try {
+            if (isFollowed) {
+                followedTokensService.unfollowToken(tokenData.address);
+                setIsFollowed(false);
+                toast.success(`Unfollowed ${tokenData.symbol}`);
+            } else {
+                const tokenLogo = tokenMetadata?.logo || tokenData.logo;
+                followedTokensService.followToken({
+                    address: tokenData.address,
+                    name: tokenData.name,
+                    symbol: tokenData.symbol,
+                    logo: tokenLogo
+                });
+                setIsFollowed(true);
+                toast.success(`Following ${tokenData.symbol}`);
+            }
+        } catch (error) {
+            toast.error('Failed to update follow status');
+        }
+    };
+
     if (authLoading) {
         return (
             <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -272,38 +319,30 @@ function WatchlistContent() {
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center space-x-3">
                                     {/* Token Logo */}
-                                    {isLoadingMetadata ? (
-                                        <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                                        </div>
-                                    ) : tokenMetadata?.logo ? (
-                                        <img
-                                            src={tokenMetadata.logo}
-                                            alt={tokenData.name}
-                                            className="w-10 h-10 rounded-full object-cover bg-slate-700 flex-shrink-0"
-                                            onError={(e) => {
-                                                (e.target as HTMLImageElement).style.display = 'none';
-                                            }}
-                                        />
-                                    ) : (
-                                        <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                            <span className="text-white text-sm font-bold">
-                                                {tokenData.symbol.charAt(0)}
-                                            </span>
-                                        </div>
-                                    )}
+                                    <TokenLogo
+                                        tokenAddress={tokenData.address}
+                                        tokenSymbol={tokenData.symbol}
+                                        size="md"
+                                    />
                                     {/* Token Name and Symbol */}
                                     <div className="flex-1 min-w-0">
-                                        <h2
-                                            className="text-lg font-bold text-white cursor-pointer hover:text-blue-400 transition-colors truncate"
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(tokenData.address);
-                                                toast.success('Contract address copied!');
-                                            }}
-                                            title="Click to copy contract address"
-                                        >
-                                            {tokenData.name}
-                                        </h2>
+                                        <div className="flex items-center space-x-2">
+                                            <h2 className="text-lg font-bold text-white truncate">
+                                                {tokenData.name}
+                                            </h2>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(tokenData.address);
+                                                    toast.success('Contract address copied!');
+                                                }}
+                                                className="p-1 hover:bg-slate-600 rounded transition-colors"
+                                                title="Copy contract address"
+                                            >
+                                                <svg className="w-3 h-3 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                         <p className="text-slate-400 text-sm">${tokenData.symbol}</p>
                                     </div>
                                 </div>
@@ -357,32 +396,16 @@ function WatchlistContent() {
                                 </div>
                             </div>
 
-                            {/* Mobile Price and Stats */}
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <div className="text-slate-400 text-xs mb-1">PRICE USD</div>
-                                    <div className="text-white text-lg font-bold">
-                                        {isLoadingPairs ? "Loading..." : `$${formatPrice(getCurrentPrice())}`}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-slate-400 text-xs mb-1">FDV</div>
-                                    <div className="text-white text-lg font-bold">
-                                        {isLoadingMetadata ? "..." : formatMarketCap(getFullyDilutedValue())}
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* Mobile Platform Links */}
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center gap-1 mb-3 overflow-x-auto">
                                 <a
                                     href={`https://solscan.io/token/${tokenData.address}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                    className="flex items-center space-x-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition-colors flex-shrink-0"
                                     title="View on Solscan"
                                 >
-                                    <img src="/solscanlogo.png" alt="Solscan" className="w-4 h-4" />
+                                    <img src="/solscanlogo.png" alt="Solscan" className="w-3 h-3" />
                                     <span>Solscan</span>
                                 </a>
 
@@ -391,14 +414,65 @@ function WatchlistContent() {
                                         href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        className="flex items-center space-x-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition-colors flex-shrink-0"
                                         title="Trade on Axiom"
                                     >
-                                        <img src="/axiomlogo.jpg" alt="Axiom" className="w-4 h-4 rounded" />
+                                        <img src="/axiomlogo.jpg" alt="Axiom" className="w-3 h-3 rounded" />
                                         <span>Axiom</span>
                                     </a>
                                 )}
+
+                                {/* Mobile Follow Button */}
+                                <button
+                                    onClick={handleFollowToggle}
+                                    className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-all duration-200 flex-shrink-0 ${isFollowed
+                                        ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+                                        : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400'
+                                        }`}
+                                    title={isFollowed ? 'Unfollow Token' : 'Follow Token'}
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        {isFollowed ? (
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        ) : (
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                        )}
+                                    </svg>
+                                    <span>{isFollowed ? 'Unfollow' : 'Follow'}</span>
+                                </button>
                             </div>
+
+                            {/* Mobile Price and Stats */}
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div>
+                                    <div className="text-slate-400 text-xs mb-1">PRICE USD</div>
+                                    <div className="text-white text-base font-bold">
+                                        {isLoadingPairs ? "Loading..." : `$${formatPrice(getCurrentPrice())}`}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-slate-400 text-xs mb-1">FDV</div>
+                                    <div className="text-white text-base font-bold">
+                                        {isLoadingMetadata ? "..." : formatMarketCap(getFullyDilutedValue())}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Mobile Create Alert Panel */}
+                            {user && (
+                                <div className="bg-slate-700/50 rounded-lg p-4">
+                                    <div className="mb-3">
+                                        <div className="text-slate-400 text-xs mb-1">PRICE ALERTS</div>
+                                    </div>
+
+                                    <CreateAlertForm
+                                        onAlertCreated={handleAlertCreated}
+                                        onCancel={() => { }}
+                                        prefilledTokenAddress={tokenData.address}
+                                        isCompact={true}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -417,38 +491,30 @@ function WatchlistContent() {
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center space-x-4">
                                         {/* Token Logo */}
-                                        {isLoadingMetadata ? (
-                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                                            </div>
-                                        ) : tokenMetadata?.logo ? (
-                                            <img
-                                                src={tokenMetadata.logo}
-                                                alt={tokenData.name}
-                                                className="w-12 h-12 rounded-full object-cover bg-slate-700 flex-shrink-0"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                }}
-                                            />
-                                        ) : (
-                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <span className="text-white text-lg font-bold">
-                                                    {tokenData.symbol.charAt(0)}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <TokenLogo
+                                            tokenAddress={tokenData.address}
+                                            tokenSymbol={tokenData.symbol}
+                                            size="lg"
+                                        />
                                         {/* Token Name and Symbol */}
                                         <div className="flex-1 min-w-0">
-                                            <h2
-                                                className="text-xl font-bold text-white cursor-pointer hover:text-blue-400 transition-colors truncate"
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(tokenData.address);
-                                                    toast.success('Contract address copied!');
-                                                }}
-                                                title="Click to copy contract address"
-                                            >
-                                                {tokenData.name}
-                                            </h2>
+                                            <div className="flex items-center space-x-2">
+                                                <h2 className="text-xl font-bold text-white truncate">
+                                                    {tokenData.name}
+                                                </h2>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(tokenData.address);
+                                                        toast.success('Contract address copied!');
+                                                    }}
+                                                    className="p-1 hover:bg-slate-600 rounded transition-colors"
+                                                    title="Copy contract address"
+                                                >
+                                                    <svg className="w-4 h-4 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                    </svg>
+                                                </button>
+                                            </div>
                                             <p className="text-slate-400">${tokenData.symbol}</p>
                                         </div>
                                     </div>
@@ -503,16 +569,16 @@ function WatchlistContent() {
                                 </div>
 
                                 {/* Platform Links */}
-                                <div className="flex flex-wrap items-center gap-2 mb-6">
+                                <div className="flex items-center gap-1 mb-4 overflow-x-auto">
                                     {/* Solscan Link */}
                                     <a
                                         href={`https://solscan.io/token/${tokenData.address}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                        className="flex items-center space-x-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition-colors flex-shrink-0"
                                         title="View on Solscan"
                                     >
-                                        <img src="/solscanlogo.png" alt="Solscan" className="w-4 h-4" />
+                                        <img src="/solscanlogo.png" alt="Solscan" className="w-3 h-3" />
                                         <span>Solscan</span>
                                     </a>
 
@@ -522,23 +588,43 @@ function WatchlistContent() {
                                             href={`https://axiom.trade/meme/${tokenPairs.pairs[0].pairAddress}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-white text-sm transition-colors"
+                                            className="flex items-center space-x-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-white text-xs transition-colors flex-shrink-0"
                                             title="Trade on Axiom"
                                         >
-                                            <img src="/axiomlogo.jpg" alt="Axiom" className="w-4 h-4 rounded" />
+                                            <img src="/axiomlogo.jpg" alt="Axiom" className="w-3 h-3 rounded" />
                                             <span>Axiom</span>
                                         </a>
                                     )}
+
+                                    {/* Follow Token Button */}
+                                    <button
+                                        onClick={handleFollowToggle}
+                                        className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-all duration-200 flex-shrink-0 ${isFollowed
+                                            ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+                                            : 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400'
+                                            }`}
+                                        title={isFollowed ? 'Unfollow Token' : 'Follow Token'}
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            {isFollowed ? (
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            ) : (
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                            )}
+                                        </svg>
+                                        <span>{isFollowed ? 'Unfollow' : 'Follow'}</span>
+                                    </button>
                                 </div>
+
                                 {/* Price Information */}
-                                <div className="grid grid-cols-2 gap-6 mb-6">
+                                <div className="grid grid-cols-2 gap-4 mb-4">
                                     <div>
-                                        <div className="text-slate-400 text-sm mb-1">PRICE USD</div>
-                                        <div className="text-white text-2xl font-bold">
+                                        <div className="text-slate-400 text-xs mb-1">PRICE USD</div>
+                                        <div className="text-white text-lg font-bold">
                                             {isLoadingPairs ? (
                                                 <div className="flex items-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                                                    <span className="text-lg">Loading...</span>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                                    <span className="text-base">Loading...</span>
                                                 </div>
                                             ) : (
                                                 `$${formatPrice(getCurrentPrice())}`
@@ -546,8 +632,8 @@ function WatchlistContent() {
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-slate-400 text-sm mb-1">PRICE SOL</div>
-                                        <div className="text-white text-2xl font-bold">
+                                        <div className="text-slate-400 text-xs mb-1">PRICE SOL</div>
+                                        <div className="text-white text-lg font-bold">
                                             {isLoadingPairs ? (
                                                 "Loading..."
                                             ) : tokenPairs && tokenPairs.pairs && tokenPairs.pairs.length > 0 ? (
@@ -583,20 +669,21 @@ function WatchlistContent() {
                                     </div>
                                 </div>
 
-                                {/* Contract Address */}
-                                <div className="bg-slate-700 rounded-lg p-4">
-                                    <div className="text-slate-400 text-xs mb-1">CONTRACT ADDRESS</div>
-                                    <div
-                                        className="text-white font-mono text-sm cursor-pointer hover:text-blue-400 transition-colors"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(tokenData.address);
-                                            toast.success('Contract address copied!');
-                                        }}
-                                        title="Click to copy contract address"
-                                    >
-                                        {`${tokenData.address.slice(0, 6)}...${tokenData.address.slice(-6)}`}
+                                {/* Create Alert Panel */}
+                                {user && (
+                                    <div className="bg-slate-700/50 rounded-lg p-4">
+                                        <div className="mb-3">
+                                            <div className="text-slate-400 text-xs mb-1">PRICE ALERTS</div>
+                                        </div>
+
+                                        <CreateAlertForm
+                                            onAlertCreated={handleAlertCreated}
+                                            onCancel={() => { }}
+                                            prefilledTokenAddress={tokenData.address}
+                                            isCompact={true}
+                                        />
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>

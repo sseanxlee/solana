@@ -3,6 +3,7 @@ import { query } from '../config/database';
 import { authenticateToken } from '../middleware/auth';
 import { TokenService } from '../services/tokenService';
 import { MonitoringService } from '../services/monitoringService';
+import { TelegramBotService } from '../services/telegramBotService';
 import { AuthRequest, TokenAlert, ApiResponse } from '../types';
 
 const router = Router();
@@ -17,30 +18,45 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     try {
         let result;
 
-        // If user has telegram_chat_id, get alerts from both the wallet-based user and telegram-based user
+        // Get alerts from all linked accounts (wallet, telegram, discord)
+        // This includes a broader search to catch orphaned Discord alerts
+        const conditions = ['ta.user_id = $1']; // Direct wallet-based alerts
+        const params = [req.user!.id];
+
         if (req.user!.telegram_chat_id) {
-            result = await query(
-                `SELECT DISTINCT ta.* FROM token_alerts ta
-                 JOIN users u ON ta.user_id = u.id 
-                 WHERE (ta.user_id = $1 OR u.telegram_chat_id = $2)
-                 ORDER BY ta.created_at DESC`,
-                [req.user!.id, req.user!.telegram_chat_id]
-            );
-        } else {
-            // If no telegram linked, just get wallet-based alerts
-            result = await query(
-                `SELECT * FROM token_alerts 
-       WHERE user_id = $1 
-       ORDER BY created_at DESC`,
-                [req.user!.id]
-            );
+            conditions.push('u.telegram_chat_id = $' + (params.length + 1));
+            params.push(req.user!.telegram_chat_id);
         }
+
+        if (req.user!.discord_user_id) {
+            conditions.push('u.discord_user_id = $' + (params.length + 1));
+            params.push(req.user!.discord_user_id);
+        }
+
+        // TEMPORARY: Include all Discord alerts for debugging
+        // This helps surface orphaned Discord alerts that should be linked
+        conditions.push("ta.notification_type = 'discord'");
+
+        result = await query(
+            `SELECT DISTINCT ta.*, u.wallet_address as alert_user_wallet, u.discord_user_id as alert_user_discord 
+             FROM token_alerts ta
+             JOIN users u ON ta.user_id = u.id 
+             WHERE (${conditions.join(' OR ')})
+             ORDER BY ta.created_at DESC`,
+            params
+        );
 
         const alerts = result.rows as TokenAlert[];
 
+        // Add tracking status for each alert
+        const alertsWithStatus = alerts.map(alert => ({
+            ...alert,
+            is_being_tracked: alert.is_active && !alert.is_triggered
+        }));
+
         res.json({
             success: true,
-            data: alerts
+            data: alertsWithStatus
         } as ApiResponse<TokenAlert[]>);
     } catch (error) {
         console.error('Error fetching alerts:', error);
@@ -243,6 +259,29 @@ router.put('/:id', async (req: AuthRequest, res: Response) => {
 
         const updatedAlert = updateResult.rows[0] as TokenAlert;
 
+        // If the alert was deactivated, check if monitoring should be stopped for this token
+        if (isActive === false) {
+            try {
+                // Check if there are any remaining active alerts for this token
+                const remainingAlerts = await query(
+                    'SELECT COUNT(*) as count FROM token_alerts WHERE token_address = $1 AND is_active = true AND is_triggered = false',
+                    [updatedAlert.token_address]
+                );
+
+                const remainingCount = parseInt(remainingAlerts.rows[0].count);
+
+                // If no more alerts for this token, notify telegram bot service to update monitoring
+                if (remainingCount === 0) {
+                    const telegramBotService = TelegramBotService.getInstance();
+                    await telegramBotService.checkAndUpdateTokenMonitoring(updatedAlert.token_address);
+                    console.log(`Triggered monitoring cleanup for token ${updatedAlert.token_address} (alert deactivated, no remaining alerts)`);
+                }
+            } catch (cleanupError) {
+                console.error('Error during monitoring cleanup after deactivating alert:', cleanupError);
+                // Don't fail the update if cleanup fails
+            }
+        }
+
         res.json({
             success: true,
             data: updatedAlert,
@@ -262,16 +301,45 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
 
+        // First get the alert info before deleting
+        const alertInfo = await query(
+            'SELECT token_address FROM token_alerts WHERE id = $1 AND user_id = $2',
+            [id, req.user!.id]
+        );
+
+        if (alertInfo.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Alert not found'
+            } as ApiResponse);
+        }
+
+        const tokenAddress = alertInfo.rows[0].token_address;
+
         const result = await query(
             'DELETE FROM token_alerts WHERE id = $1 AND user_id = $2 RETURNING *',
             [id, req.user!.id]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                error: 'Alert not found'
-            } as ApiResponse);
+        // Check if there are any remaining active alerts for this token
+        const remainingAlerts = await query(
+            'SELECT COUNT(*) as count FROM token_alerts WHERE token_address = $1 AND is_active = true AND is_triggered = false',
+            [tokenAddress]
+        );
+
+        const remainingCount = parseInt(remainingAlerts.rows[0].count);
+
+        // If no more alerts for this token, notify telegram bot service to update monitoring
+        if (remainingCount === 0) {
+            try {
+                const telegramBotService = TelegramBotService.getInstance();
+                // Trigger monitoring cleanup for this token
+                await telegramBotService.checkAndUpdateTokenMonitoring(tokenAddress);
+                console.log(`Triggered monitoring cleanup for token ${tokenAddress} (no remaining alerts)`);
+            } catch (cleanupError) {
+                console.error('Error during monitoring cleanup:', cleanupError);
+                // Don't fail the deletion if cleanup fails
+            }
         }
 
         res.json({
@@ -323,6 +391,66 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
         res.status(500).json({
             success: false,
             error: 'Failed to test alert'
+        } as ApiResponse);
+    }
+});
+
+// GET /alerts/monitoring/status - Get monitoring system status
+router.get('/monitoring/status', async (req: AuthRequest, res: Response) => {
+    try {
+        const telegramBotService = TelegramBotService.getInstance();
+
+        // Get active alerts count across all users
+        const activeAlertsResult = await query(`
+            SELECT COUNT(*) as count, 
+                   COUNT(DISTINCT token_address) as unique_tokens
+            FROM token_alerts 
+            WHERE is_active = true AND is_triggered = false
+        `);
+
+        const totalActiveAlerts = parseInt(activeAlertsResult.rows[0].count);
+        const uniqueTokens = parseInt(activeAlertsResult.rows[0].unique_tokens);
+
+        // Get user's active alerts
+        let userActiveAlerts;
+        if (req.user!.telegram_chat_id) {
+            userActiveAlerts = await query(`
+                SELECT DISTINCT ta.token_address, ta.token_name, ta.token_symbol
+                FROM token_alerts ta
+                JOIN users u ON ta.user_id = u.id 
+                WHERE ta.is_active = true AND ta.is_triggered = false 
+                AND (ta.user_id = $1 OR u.telegram_chat_id = $2)
+            `, [req.user!.id, req.user!.telegram_chat_id]);
+        } else {
+            userActiveAlerts = await query(`
+                SELECT DISTINCT ta.token_address, ta.token_name, ta.token_symbol
+                FROM token_alerts ta
+                WHERE ta.is_active = true AND ta.is_triggered = false 
+                AND ta.user_id = $1
+            `, [req.user!.id]);
+        }
+
+        const status = {
+            system: {
+                totalActiveAlerts,
+                uniqueTokens,
+                botRunning: telegramBotService.isRunningBot()
+            },
+            user: {
+                activeAlerts: userActiveAlerts.rows.length,
+                tokens: userActiveAlerts.rows
+            }
+        };
+
+        res.json({
+            success: true,
+            data: status
+        } as ApiResponse);
+    } catch (error) {
+        console.error('Error getting monitoring status:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get monitoring status'
         } as ApiResponse);
     }
 });

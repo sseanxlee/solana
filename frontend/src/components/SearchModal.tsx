@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService, TokenData } from '../services/api';
+import { tokenCacheService } from '../services/tokenCache';
 import toast from 'react-hot-toast';
 
 interface SearchHistoryItem extends TokenData {
@@ -104,7 +105,13 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                     // Conditionally fetch metadata if needed
                     let metadataPromise = null;
                     if (needsMetadataRefresh) {
-                        metadataPromise = apiService.getTokenMetadata(token.address);
+                        // Check cache first
+                        const cachedToken = tokenCacheService.getCachedToken(token.address);
+                        if (cachedToken) {
+                            metadataPromise = Promise.resolve({ success: true, data: cachedToken });
+                        } else {
+                            metadataPromise = apiService.getTokenMetadata(token.address);
+                        }
                     }
 
                     // Wait for both requests to complete
@@ -124,6 +131,12 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                         };
                         updatedToken.logo = metadataResponse.data.logo;
                         updatedToken.metadata_last_updated = currentTime;
+
+                        // Cache the token metadata if it was freshly fetched from API
+                        const cachedToken = tokenCacheService.getCachedToken(token.address);
+                        if (!cachedToken) {
+                            tokenCacheService.cacheToken(token.address, metadataResponse.data);
+                        }
                     }
 
                     // Always update pairs data (price, liquidity)
@@ -321,8 +334,14 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
 
         try {
             // Make API calls to get fresh token data
+            // Check cache first for metadata
+            const cachedToken = tokenCacheService.getCachedToken(token.address);
+            const metadataPromise = cachedToken
+                ? Promise.resolve({ success: true, data: cachedToken })
+                : apiService.getTokenMetadata(token.address);
+
             const [metadataResponse, pairsResponse] = await Promise.all([
-                apiService.getTokenMetadata(token.address),
+                metadataPromise,
                 apiService.getTokenPairs(token.address)
             ]);
 
@@ -337,6 +356,11 @@ export default function SearchModal({ isOpen, onClose, searchHistory, onUpdateHi
                 };
                 // Update the logo in the main token data too
                 updatedToken.logo = metadataResponse.data.logo;
+
+                // Cache the token metadata if it was freshly fetched from API (not from cache)
+                if (!cachedToken) {
+                    tokenCacheService.cacheToken(token.address, metadataResponse.data);
+                }
             }
 
             if (pairsResponse.success && pairsResponse.data && pairsResponse.data.pairs?.length > 0) {

@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
   wallet_address VARCHAR(44) UNIQUE,
   email VARCHAR(255),
   telegram_chat_id VARCHAR(255) UNIQUE,
+  discord_user_id VARCHAR(255) UNIQUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -18,7 +19,7 @@ CREATE TABLE IF NOT EXISTS token_alerts (
   threshold_type VARCHAR(20) NOT NULL CHECK (threshold_type IN ('price', 'market_cap')),
   threshold_value DECIMAL(20, 8) NOT NULL,
   condition VARCHAR(10) NOT NULL CHECK (condition IN ('above', 'below')),
-  notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram')),
+  notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram', 'discord')),
   circulating_supply DECIMAL(30, 8),
   current_market_cap DECIMAL(30, 2),
   is_active BOOLEAN DEFAULT TRUE,
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS token_data (
 CREATE TABLE IF NOT EXISTS notification_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   alert_id UUID REFERENCES token_alerts(id) ON DELETE CASCADE,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram')),
+  type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram', 'discord')),
   recipient VARCHAR(255) NOT NULL,
   subject VARCHAR(255),
   message TEXT NOT NULL,

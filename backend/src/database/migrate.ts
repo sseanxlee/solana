@@ -13,6 +13,7 @@ const createTables = async () => {
         wallet_address VARCHAR(44) UNIQUE NOT NULL,
         email VARCHAR(255),
         telegram_chat_id VARCHAR(255),
+        discord_user_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -29,7 +30,7 @@ const createTables = async () => {
         threshold_type VARCHAR(20) NOT NULL CHECK (threshold_type IN ('price', 'market_cap')),
         threshold_value DECIMAL(20, 8) NOT NULL,
         condition VARCHAR(10) NOT NULL CHECK (condition IN ('above', 'below')),
-        notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram')),
+        notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram', 'discord')),
         is_active BOOLEAN DEFAULT TRUE,
         is_triggered BOOLEAN DEFAULT FALSE,
         triggered_at TIMESTAMP,
@@ -55,7 +56,7 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS notification_queue (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         alert_id UUID REFERENCES token_alerts(id) ON DELETE CASCADE,
-        type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram')),
+                    type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram', 'discord')),
         recipient VARCHAR(255) NOT NULL,
         subject VARCHAR(255),
         message TEXT NOT NULL,
@@ -136,6 +137,40 @@ const createTables = async () => {
       console.log('Successfully added current_market_cap column to token_alerts');
     } catch (error: any) {
       console.log('Note: Could not add current_market_cap column (may already exist):', error.message);
+    }
+
+    // Add discord_user_id column to users table if it doesn't exist
+    try {
+      await query('ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_user_id VARCHAR(255);');
+      console.log('Successfully added discord_user_id column to users');
+    } catch (error: any) {
+      console.log('Note: Could not add discord_user_id column (may already exist):', error.message);
+    }
+
+    // Add unique constraint to discord_user_id if not exists
+    try {
+      await query('ALTER TABLE users ADD CONSTRAINT users_discord_user_id_unique UNIQUE (discord_user_id);');
+      console.log('Successfully added unique constraint to discord_user_id');
+    } catch (error: any) {
+      console.log('Note: Could not add unique constraint to discord_user_id (may already exist):', error.message);
+    }
+
+    // Update notification_type check constraint to include 'discord'
+    try {
+      await query('ALTER TABLE token_alerts DROP CONSTRAINT IF EXISTS token_alerts_notification_type_check;');
+      await query('ALTER TABLE token_alerts ADD CONSTRAINT token_alerts_notification_type_check CHECK (notification_type IN (\'email\', \'telegram\', \'discord\'));');
+      console.log('Successfully updated notification_type check constraint to include discord');
+    } catch (error: any) {
+      console.log('Note: Could not update notification_type constraint:', error.message);
+    }
+
+    // Update notification_queue type check constraint to include 'discord'
+    try {
+      await query('ALTER TABLE notification_queue DROP CONSTRAINT IF EXISTS notification_queue_type_check;');
+      await query('ALTER TABLE notification_queue ADD CONSTRAINT notification_queue_type_check CHECK (type IN (\'email\', \'telegram\', \'discord\'));');
+      console.log('Successfully updated notification_queue type check constraint to include discord');
+    } catch (error: any) {
+      console.log('Note: Could not update notification_queue type constraint:', error.message);
     }
 
     console.log('Database migration completed successfully!');

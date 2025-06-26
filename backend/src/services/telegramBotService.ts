@@ -635,6 +635,15 @@ Choose alert type:`;
                     statusMessage += `Current Token: \`${shortCurrentToken}\`\n`;
                 }
 
+                // Add tracking status for each token
+                statusMessage += `\n🔍 *Tracking Status*\n`;
+                const trackedTokens = Array.from(this.tokenAlerts.keys());
+                if (trackedTokens.length > 0) {
+                    statusMessage += `Actively tracking ${trackedTokens.length} token(s)\n`;
+                } else {
+                    statusMessage += `No tokens actively tracked\n`;
+                }
+
                 await this.sendMessage(chatId, statusMessage, { parse_mode: 'Markdown' });
 
             } catch (error) {
@@ -652,6 +661,7 @@ Choose alert type:`;
                 const solPrice = await this.getSolPrice();
 
                 // Get all unique token addresses with active alerts for this user
+                // Only include tokens that are currently being monitored (in alertstatus)
                 const alertsResult = await query(`
                     SELECT DISTINCT ta.token_address, ta.token_name, ta.token_symbol
                     FROM token_alerts ta
@@ -661,47 +671,64 @@ Choose alert type:`;
                     ORDER BY ta.token_name
                 `, [chatId]);
 
+                // Filter to only show tokens that are actively being tracked
+                const activelyTrackedTokens = alertsResult.rows.filter(token =>
+                    this.tokenAlerts.has(token.token_address) ||
+                    this.streamingService.getCurrentToken() === token.token_address
+                );
+
                 // Debug logging
-                console.log(`[PRICES] User ${chatId} requested prices, found ${alertsResult.rows.length} tokens with active alerts:`);
-                alertsResult.rows.forEach((row, index) => {
+                console.log(`[PRICES] User ${chatId} requested prices:`);
+                console.log(`[PRICES] - Found ${alertsResult.rows.length} tokens with active alerts`);
+                console.log(`[PRICES] - ${activelyTrackedTokens.length} tokens are actively tracked`);
+                activelyTrackedTokens.forEach((row, index) => {
                     console.log(`[PRICES] ${index + 1}. ${row.token_name} (${row.token_symbol}) - ${row.token_address}`);
                 });
 
                 let pricesMessage = `💰 *Current Prices*\n\n🟣 *Solana (SOL)*: *$${this.formatPrice(solPrice)}*\n\n`;
 
-                if (alertsResult.rows.length === 0) {
-                    pricesMessage += '📊 *Tracked Tokens*\n\nNo tokens with active alerts.';
+                if (activelyTrackedTokens.length === 0) {
+                    if (alertsResult.rows.length > 0) {
+                        pricesMessage += '📊 *Tracked Tokens*\n\n⚠️ You have active alerts, but no tokens are currently being monitored.\nThis may happen after a server restart. Your alerts will activate when monitoring resumes.';
+                    } else {
+                        pricesMessage += '📊 *Tracked Tokens*\n\nNo tokens with active alerts.';
+                    }
                 } else {
-                    pricesMessage += '📊 *Tracked Tokens*\n';
+                    pricesMessage += '📊 *Actively Tracked Tokens*\n';
 
-                    // Fetch current market data for each token
-                    for (const alert of alertsResult.rows) {
+                    // Fetch current market data for each actively tracked token
+                    for (const alert of activelyTrackedTokens) {
                         try {
                             const marketData = await this.birdeyeService.getTokenMarketData(alert.token_address);
+
+                            const isCurrentlyMonitored = this.streamingService.getCurrentToken() === alert.token_address;
+                            const monitoringStatus = isCurrentlyMonitored ? '🟢' : '🟡';
 
                             if (marketData) {
                                 const tokenPriceUSD = marketData.price * solPrice;
                                 const marketCap = marketData.market_cap;
                                 const shortAddress = `${alert.token_address.slice(0, 6)}...${alert.token_address.slice(-6)}`;
 
-                                pricesMessage += `\n*${alert.token_name}* ($${alert.token_symbol})\n`;
-                                pricesMessage += `Address: \`${shortAddress}\`\n`;
+                                pricesMessage += `\n${monitoringStatus} *${alert.token_name}* ($${alert.token_symbol})\n`;
+                                pricesMessage += `Address: \`${alert.token_address}\`\n`;
                                 pricesMessage += `Price: *$${this.formatPrice(tokenPriceUSD)}*\n`;
                                 pricesMessage += `Market Cap: *${this.formatLargeNumber(marketCap)}*\n`;
                             } else {
-                                const shortAddress = `${alert.token_address.slice(0, 6)}...${alert.token_address.slice(-6)}`;
-                                pricesMessage += `\n*${alert.token_name}* ($${alert.token_symbol})\n`;
-                                pricesMessage += `Address: \`${shortAddress}\`\n`;
+                                pricesMessage += `\n${monitoringStatus} *${alert.token_name}* ($${alert.token_symbol})\n`;
+                                pricesMessage += `Address: \`${alert.token_address}\`\n`;
                                 pricesMessage += `Price: *Data unavailable*\n`;
                             }
                         } catch (error) {
                             console.error(`Error fetching data for token ${alert.token_address}:`, error);
-                            const shortAddress = `${alert.token_address.slice(0, 6)}...${alert.token_address.slice(-6)}`;
-                            pricesMessage += `\n*${alert.token_name}* ($${alert.token_symbol})\n`;
-                            pricesMessage += `Address: \`${shortAddress}\`\n`;
+                            const isCurrentlyMonitored = this.streamingService.getCurrentToken() === alert.token_address;
+                            const monitoringStatus = isCurrentlyMonitored ? '🟢' : '🟡';
+                            pricesMessage += `\n${monitoringStatus} *${alert.token_name}* ($${alert.token_symbol})\n`;
+                            pricesMessage += `Address: \`${alert.token_address}\`\n`;
                             pricesMessage += `Price: *Error fetching data*\n`;
                         }
                     }
+
+                    pricesMessage += `\n🟢 = Currently monitored | 🟡 = Tracked`;
                 }
 
                 pricesMessage += `\n\n🕐 *Updated*: ${new Date().toLocaleString()}`;
@@ -1588,28 +1615,88 @@ You'll be notified when the market cap goes ${condition} your target!`;
     // Resume monitoring for existing alerts on startup
     private async resumeMonitoringForExistingAlerts(): Promise<void> {
         try {
+            console.log('[STARTUP] Resetting orphaned alerts and resuming monitoring...');
+
+            // First, reset any orphaned alerts (alerts that might be stuck in inconsistent state)
+            await this.resetOrphanedAlerts();
+
             // Get all active alerts from database
             const alertsResult = await query(`
                 SELECT DISTINCT token_address, token_name, token_symbol
                 FROM token_alerts 
                 WHERE is_active = true AND is_triggered = false
-                ORDER BY created_at ASC
-                LIMIT 1
+                ORDER BY token_address ASC
             `);
 
             if (alertsResult.rows.length > 0) {
                 const tokenToMonitor = alertsResult.rows[0];
+                console.log(`[STARTUP] Found ${alertsResult.rows.length} tokens with active alerts`);
                 console.log(`[STARTUP] Resuming monitoring for: ${tokenToMonitor.token_name} (${tokenToMonitor.token_symbol}) - ${tokenToMonitor.token_address}`);
 
-                // Start monitoring the first token found with active alerts
+                // Since we can only monitor one token at a time via websocket, start with the first one
                 await this.startMonitoringIfNeeded(tokenToMonitor.token_address);
 
                 console.log(`[STARTUP] Successfully resumed monitoring for ${tokenToMonitor.token_name}`);
+
+                if (alertsResult.rows.length > 1) {
+                    console.log(`[STARTUP] Note: ${alertsResult.rows.length - 1} other tokens also have alerts but will be monitored when current token completes`);
+                }
             } else {
                 console.log('[STARTUP] No active alerts found - monitoring not started');
             }
         } catch (error) {
             console.error('[STARTUP] Error resuming monitoring for existing alerts:', error);
+        }
+    }
+
+    // Reset orphaned alerts that might be in inconsistent state
+    private async resetOrphanedAlerts(): Promise<void> {
+        try {
+            console.log('[STARTUP] Checking for orphaned alerts...');
+
+            // Clear in-memory tracking state
+            this.tokenAlerts.clear();
+            this.monitoringUsers.clear();
+            this.pendingAlerts.clear();
+            this.alertTokenMap.clear();
+
+            // Get count of alerts that might be orphaned (active but not properly tracked)
+            const activeAlertsResult = await query(`
+                SELECT COUNT(*) as count, 
+                       COUNT(DISTINCT token_address) as unique_tokens
+                FROM token_alerts 
+                WHERE is_active = true AND is_triggered = false
+            `);
+
+            const totalActiveAlerts = parseInt(activeAlertsResult.rows[0].count);
+            const uniqueTokens = parseInt(activeAlertsResult.rows[0].unique_tokens);
+
+            console.log(`[STARTUP] Found ${totalActiveAlerts} active alerts across ${uniqueTokens} unique tokens`);
+
+            if (totalActiveAlerts > 0) {
+                // Log all active alerts for debugging
+                const allActiveAlerts = await query(`
+                    SELECT ta.token_address, ta.token_name, ta.token_symbol, 
+                           ta.threshold_type, ta.threshold_value, ta.condition,
+                           COUNT(*) as alert_count
+                    FROM token_alerts ta
+                    WHERE ta.is_active = true AND ta.is_triggered = false
+                    GROUP BY ta.token_address, ta.token_name, ta.token_symbol, 
+                             ta.threshold_type, ta.threshold_value, ta.condition
+                    ORDER BY ta.token_name
+                `);
+
+                console.log('[STARTUP] Active alerts summary:');
+                allActiveAlerts.rows.forEach((alert, index) => {
+                    console.log(`[STARTUP] ${index + 1}. ${alert.token_name} (${alert.token_symbol}) - ${alert.alert_count} alerts`);
+                    console.log(`[STARTUP]    Address: ${alert.token_address}`);
+                });
+
+                console.log('[STARTUP] Alert state reset complete - ready for monitoring');
+            }
+
+        } catch (error) {
+            console.error('[STARTUP] Error resetting orphaned alerts:', error);
         }
     }
 
@@ -1636,6 +1723,10 @@ You'll be notified when the market cap goes ${condition} your target!`;
                 console.log(`[CLEANUP] ${index + 1}. ${alert.token_name} (${alert.token_symbol}) - ${alert.threshold_type}: ${alert.threshold_value}`);
             });
 
+            // Get unique token addresses that will be affected
+            const affectedTokens = [...new Set(alertsResult.rows.map(alert => alert.token_address))];
+            console.log(`[CLEANUP] Affected tokens: ${affectedTokens.map(addr => addr.slice(0, 8) + '...').join(', ')}`);
+
             // Delete all alerts for this user
             const deleteResult = await query(`
                 UPDATE token_alerts 
@@ -1650,19 +1741,106 @@ You'll be notified when the market cap goes ${condition} your target!`;
 
             console.log(`[CLEANUP] Successfully deactivated ${deleteResult.rowCount} alerts for user ${chatId}`);
 
-            // Check if there are any remaining active alerts
-            const remainingAlerts = await query(`
+            // Now check each affected token to see if it should still be monitored
+            for (const tokenAddress of affectedTokens) {
+                // Check if there are any remaining active alerts for this specific token
+                const remainingAlertsForToken = await query(`
+                    SELECT COUNT(*) as count 
+                    FROM token_alerts 
+                    WHERE token_address = $1 AND is_active = true AND is_triggered = false
+                `, [tokenAddress]);
+
+                const remainingCount = parseInt(remainingAlertsForToken.rows[0].count);
+
+                if (remainingCount === 0) {
+                    // No more alerts for this token, remove it from our alerts map
+                    this.tokenAlerts.delete(tokenAddress);
+                    console.log(`[CLEANUP] Removed ${tokenAddress.slice(0, 8)}... from local tracking (no remaining alerts)`);
+                } else {
+                    console.log(`[CLEANUP] Token ${tokenAddress.slice(0, 8)}... still has ${remainingCount} active alerts`);
+                }
+            }
+
+            // Check if there are any remaining active alerts across all users
+            const allRemainingAlerts = await query(`
                 SELECT COUNT(*) as count
                 FROM token_alerts 
                 WHERE is_active = true AND is_triggered = false
             `);
 
-            const remainingCount = parseInt(remainingAlerts.rows[0].count);
-            console.log(`[CLEANUP] Remaining active alerts across all users: ${remainingCount}`);
+            const totalRemainingCount = parseInt(allRemainingAlerts.rows[0].count);
+            console.log(`[CLEANUP] Total remaining active alerts across all users: ${totalRemainingCount}`);
 
-            if (remainingCount === 0) {
-                console.log('[CLEANUP] No more active alerts - stopping monitoring');
+            if (totalRemainingCount === 0) {
+                // No more alerts anywhere, stop monitoring entirely
+                console.log('═'.repeat(80));
+                console.log(`🔄 CLEARALERTS MONITORING UPDATE`);
+                console.log('No active alerts remaining across all users.');
+                console.log('Stopping websocket monitoring completely.');
                 await this.streamingService.stopMonitoring();
+
+                // Clear all monitoring users since no tokens are being monitored
+                this.monitoringUsers.clear();
+                console.log('═'.repeat(80));
+            } else {
+                // There are still some alerts, check if we need to switch monitoring
+                const currentlyMonitoredToken = this.streamingService.getCurrentToken();
+
+                // Check if the currently monitored token still has alerts
+                if (currentlyMonitoredToken) {
+                    const currentTokenAlerts = await query(`
+                        SELECT COUNT(*) as count 
+                        FROM token_alerts 
+                        WHERE token_address = $1 AND is_active = true AND is_triggered = false
+                    `, [currentlyMonitoredToken]);
+
+                    const currentTokenAlertsCount = parseInt(currentTokenAlerts.rows[0].count);
+
+                    if (currentTokenAlertsCount === 0) {
+                        // Currently monitored token has no alerts, switch to another token
+                        const otherActiveTokens = await query(`
+                            SELECT DISTINCT token_address, token_name, token_symbol
+                            FROM token_alerts 
+                            WHERE is_active = true AND is_triggered = false
+                            LIMIT 1
+                        `);
+
+                        if (otherActiveTokens.rows.length > 0) {
+                            const nextToken = otherActiveTokens.rows[0];
+                            console.log('═'.repeat(80));
+                            console.log(`🔄 CLEARALERTS MONITORING UPDATE`);
+                            console.log(`Currently monitored token ${currentlyMonitoredToken.slice(0, 8)}... has no remaining alerts.`);
+                            console.log(`Switching monitoring to: ${nextToken.token_name} (${nextToken.token_symbol})`);
+                            console.log(`Address: ${nextToken.token_address}`);
+
+                            // Start monitoring the new token
+                            await this.startMonitoringIfNeeded(nextToken.token_address);
+                            console.log('═'.repeat(80));
+                        }
+                    } else {
+                        console.log(`[CLEANUP] Currently monitored token ${currentlyMonitoredToken.slice(0, 8)}... still has ${currentTokenAlertsCount} alerts. Continuing monitoring.`);
+                    }
+                } else {
+                    // No token is currently being monitored, but there are alerts - start monitoring the first available
+                    const availableTokens = await query(`
+                        SELECT DISTINCT token_address, token_name, token_symbol
+                        FROM token_alerts 
+                        WHERE is_active = true AND is_triggered = false
+                        LIMIT 1
+                    `);
+
+                    if (availableTokens.rows.length > 0) {
+                        const tokenToMonitor = availableTokens.rows[0];
+                        console.log('═'.repeat(80));
+                        console.log(`🔄 CLEARALERTS MONITORING UPDATE`);
+                        console.log('No token currently monitored, but alerts exist.');
+                        console.log(`Starting monitoring for: ${tokenToMonitor.token_name} (${tokenToMonitor.token_symbol})`);
+                        console.log(`Address: ${tokenToMonitor.token_address}`);
+
+                        await this.startMonitoringIfNeeded(tokenToMonitor.token_address);
+                        console.log('═'.repeat(80));
+                    }
+                }
             }
 
         } catch (error) {
@@ -2006,6 +2184,11 @@ Condition: *${alert.condition.toUpperCase()}*
         } catch (error) {
             console.error('Error updating monitoring after alert trigger:', error);
         }
+    }
+
+    // Public method for external cleanup calls (like from REST API)
+    public async checkAndUpdateTokenMonitoring(tokenAddress: string): Promise<void> {
+        return this.checkAndUpdateMonitoring(tokenAddress);
     }
 
     // User preset management

@@ -23,6 +23,7 @@
     },
     "dependencies": {
         "@moralisweb3/common-evm-utils": "^2.27.2",
+        "discord.js": "^14.21.0",
         "geist": "^1.4.2",
         "moralis": "^2.27.2"
     },

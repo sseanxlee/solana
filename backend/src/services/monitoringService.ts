@@ -3,15 +3,21 @@ import { query } from '../config/database';
 import { TokenAlert, TokenData } from '../types';
 import { TokenService } from './tokenService';
 import { NotificationService } from './notificationService';
+import { TelegramBotService } from './telegramBotService';
+import { DiscordBotService } from './discordBotService';
 
 export class MonitoringService {
     private tokenService: TokenService;
     private notificationService: NotificationService;
+    private telegramBotService: TelegramBotService;
+    private discordBotService: DiscordBotService;
     private isRunning: boolean = false;
 
     constructor() {
         this.tokenService = new TokenService();
         this.notificationService = new NotificationService();
+        this.telegramBotService = TelegramBotService.getInstance();
+        this.discordBotService = DiscordBotService.getInstance();
     }
 
     start(): void {
@@ -132,6 +138,15 @@ export class MonitoringService {
 
                 // Update token metadata if needed
                 await this.updateAlertTokenInfo(alert.id, tokenData);
+
+                // Check if monitoring should be updated after this alert was triggered
+                try {
+                    await this.telegramBotService.checkAndUpdateTokenMonitoring(alert.token_address);
+                    await this.discordBotService.checkAndUpdateTokenMonitoring(alert.token_address);
+                    console.log(`Triggered monitoring cleanup check for token ${alert.token_address}`);
+                } catch (cleanupError) {
+                    console.error('Error during post-trigger monitoring cleanup:', cleanupError);
+                }
             }
         } catch (error) {
             console.error(`Error checking alert ${alert.id}:`, error);

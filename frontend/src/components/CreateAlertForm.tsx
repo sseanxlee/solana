@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { apiService, TokenAlert, CreateAlertRequest } from '../services/api';
+import { presetSettingsService } from '../services/presetSettings';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -9,9 +10,10 @@ interface CreateAlertFormProps {
     onAlertCreated: (alert: TokenAlert) => void;
     onCancel: () => void;
     prefilledTokenAddress?: string;
+    isCompact?: boolean;
 }
 
-export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTokenAddress }: CreateAlertFormProps) {
+export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTokenAddress, isCompact = false }: CreateAlertFormProps) {
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [formData, setFormData] = useState<CreateAlertRequest>({
@@ -29,10 +31,10 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
         isValid?: boolean;
     } | null>(null);
 
-    // Auto-validate prefilled token address
+    // Auto-validate prefilled token address (without showing toast)
     useEffect(() => {
         if (prefilledTokenAddress && prefilledTokenAddress.length === 44) {
-            validateTokenAddress();
+            validateTokenAddress(true); // Pass true to skip toast
         }
     }, [prefilledTokenAddress]);
 
@@ -48,9 +50,11 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
         }
     };
 
-    const validateTokenAddress = async () => {
+    const validateTokenAddress = async (skipToast = false) => {
         if (!formData.tokenAddress || formData.tokenAddress.length !== 44) {
-            toast.error('Please enter a valid Solana token address (44 characters)');
+            if (!skipToast) {
+                toast.error('Please enter a valid Solana token address (44 characters)');
+            }
             return;
         }
 
@@ -65,12 +69,16 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                     price: response.data.price,
                     isValid: true
                 });
-                toast.success(`Found token: ${response.data.name} (${response.data.symbol})`);
+                if (!skipToast) {
+                    toast.success(`Found token: ${response.data.name} (${response.data.symbol})`);
+                }
             }
         } catch (error: any) {
             console.error('Token validation error:', error);
             setTokenInfo({ isValid: false });
-            toast.error(error.error || 'Invalid token address or token not found');
+            if (!skipToast) {
+                toast.error(error.error || 'Invalid token address or token not found');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -116,6 +124,229 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
         }
     };
 
+    if (isCompact) {
+        const [alertType, setAlertType] = useState<'market_cap' | 'market_cap_increase' | 'market_cap_decrease'>('market_cap');
+        const [customValue, setCustomValue] = useState('');
+        const [showCustomInput, setShowCustomInput] = useState(false);
+
+        // Get custom presets from settings
+        const userPresets = presetSettingsService.getPresets();
+        const marketCapPresets = userPresets.marketCapPresets;
+        const percentagePresets = userPresets.percentagePresets;
+
+        const parseMarketCapValue = (value: string): number => {
+            const cleanValue = value.toUpperCase().replace(/[^0-9.KMB]/g, '');
+            const numMatch = cleanValue.match(/^(\d+\.?\d*)/);
+            if (!numMatch) return 0;
+
+            const num = parseFloat(numMatch[1]);
+            if (cleanValue.includes('B')) return num * 1000000000;
+            if (cleanValue.includes('M')) return num * 1000000;
+            if (cleanValue.includes('K')) return num * 1000;
+            return num;
+        };
+
+        const handlePresetClick = (preset: string | number) => {
+            if (alertType === 'market_cap') {
+                const value = parseMarketCapValue(preset as string);
+                setFormData(prev => ({ ...prev, thresholdValue: value }));
+            } else {
+                // For percentage alerts, we need to calculate the target market cap
+                // based on current market cap and percentage change
+                setFormData(prev => ({ ...prev, thresholdValue: preset as number }));
+            }
+            setShowCustomInput(false);
+        };
+
+        const handleCustomSubmit = () => {
+            if (alertType === 'market_cap') {
+                const value = parseMarketCapValue(customValue);
+                setFormData(prev => ({ ...prev, thresholdValue: value }));
+            } else {
+                const percentage = parseFloat(customValue.replace('%', ''));
+                if (!isNaN(percentage)) {
+                    setFormData(prev => ({ ...prev, thresholdValue: percentage }));
+                }
+            }
+            setCustomValue('');
+            setShowCustomInput(false);
+        };
+
+        const handleAlertTypeChange = (type: 'market_cap' | 'market_cap_increase' | 'market_cap_decrease') => {
+            setAlertType(type);
+            setFormData(prev => ({
+                ...prev,
+                thresholdType: type === 'market_cap' ? 'market_cap' : 'market_cap',
+                condition: type === 'market_cap' ? 'above' : type === 'market_cap_increase' ? 'above' : 'below',
+                thresholdValue: 0
+            }));
+            setShowCustomInput(false);
+        };
+
+        const handleCompactSubmit = async (e: React.FormEvent) => {
+            e.preventDefault();
+
+            if (!formData.tokenAddress || !formData.thresholdValue || formData.thresholdValue <= 0) {
+                toast.error('Please select a valid threshold value');
+                return;
+            }
+
+            // Determine notification method based on user preferences
+            const notificationMethod = user?.telegramChatId ? 'telegram' : user?.email ? 'email' : 'email';
+
+            const alertData = {
+                ...formData,
+                notificationType: notificationMethod as 'email' | 'telegram'
+            };
+
+            try {
+                setIsLoading(true);
+                const response = await apiService.createAlert(alertData);
+
+                if (response.success && response.data) {
+                    onAlertCreated(response.data);
+                }
+            } catch (error: any) {
+                console.error('Create alert error:', error);
+                toast.error(error.error || 'Failed to create alert');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        return (
+            <form onSubmit={handleCompactSubmit} className="space-y-3">
+                {/* Alert Type Selection */}
+                <div>
+                    <label className="block text-slate-400 text-xs mb-2">Alert Type</label>
+                    <div className="grid grid-cols-1 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => handleAlertTypeChange('market_cap')}
+                            className={`p-2 rounded text-sm transition-colors text-left ${alertType === 'market_cap'
+                                ? 'bg-cyan-500/30 border border-cyan-400/50 text-cyan-300'
+                                : 'bg-slate-600 border border-slate-500 text-slate-300 hover:bg-slate-500'
+                                }`}
+                        >
+                            Market Cap Target
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleAlertTypeChange('market_cap_increase')}
+                            className={`p-2 rounded text-sm transition-colors text-left ${alertType === 'market_cap_increase'
+                                ? 'bg-cyan-500/30 border border-cyan-400/50 text-cyan-300'
+                                : 'bg-slate-600 border border-slate-500 text-slate-300 hover:bg-slate-500'
+                                }`}
+                        >
+                            Market Cap Increase %
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleAlertTypeChange('market_cap_decrease')}
+                            className={`p-2 rounded text-sm transition-colors text-left ${alertType === 'market_cap_decrease'
+                                ? 'bg-cyan-500/30 border border-cyan-400/50 text-cyan-300'
+                                : 'bg-slate-600 border border-slate-500 text-slate-300 hover:bg-slate-500'
+                                }`}
+                        >
+                            Market Cap Decrease %
+                        </button>
+                    </div>
+                </div>
+
+                {/* Presets */}
+                <div>
+                    <label className="block text-slate-400 text-xs mb-2">
+                        {alertType === 'market_cap' ? 'Quick Presets' : 'Percentage Presets'}
+                    </label>
+                    <div className="grid grid-cols-3 gap-1">
+                        {(alertType === 'market_cap' ? marketCapPresets : percentagePresets).map((preset) => (
+                            <button
+                                key={preset}
+                                type="button"
+                                onClick={() => handlePresetClick(preset)}
+                                className={`p-2 text-xs rounded transition-colors ${(alertType === 'market_cap' && formData.thresholdValue === parseMarketCapValue(preset as string)) ||
+                                    (alertType !== 'market_cap' && formData.thresholdValue === preset)
+                                    ? 'bg-cyan-500/30 border border-cyan-400/50 text-cyan-300'
+                                    : 'bg-slate-600 border border-slate-500 text-white hover:bg-slate-500'
+                                    }`}
+                            >
+                                {alertType === 'market_cap' ? preset : `${preset}%`}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Custom Input Toggle */}
+                <div className="flex items-center justify-between">
+                    <button
+                        type="button"
+                        onClick={() => setShowCustomInput(!showCustomInput)}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                    >
+                        {showCustomInput ? '- Hide Custom Input' : '+ Custom Value'}
+                    </button>
+                    <a
+                        href="/settings"
+                        className="text-xs text-slate-400 hover:text-slate-300 transition-colors"
+                        title="Customize presets in settings"
+                    >
+                        Edit Presets
+                    </a>
+                </div>
+
+                {/* Custom Input */}
+                {showCustomInput && (
+                    <div className="flex space-x-2">
+                        <input
+                            type="text"
+                            value={customValue}
+                            onChange={(e) => setCustomValue(e.target.value)}
+                            placeholder={alertType === 'market_cap' ? 'e.g., 50M, 2.5B' : 'e.g., 75, 150'}
+                            className="bg-slate-600 border border-slate-500 text-white text-sm rounded px-3 py-2 flex-1 focus:outline-none focus:border-cyan-400"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleCustomSubmit}
+                            className="bg-cyan-500 hover:bg-cyan-400 text-white text-xs px-3 py-2 rounded transition-colors"
+                        >
+                            Set
+                        </button>
+                    </div>
+                )}
+
+                {/* Current Selection Display */}
+                {formData.thresholdValue > 0 && (
+                    <div className="bg-slate-700/50 rounded p-2">
+                        <div className="text-xs text-slate-400 mb-1">Selected Alert:</div>
+                        <div className="text-sm text-white">
+                            {alertType === 'market_cap' && `Market Cap reaches $${formData.thresholdValue.toLocaleString()}`}
+                            {alertType === 'market_cap_increase' && `Market Cap increases by ${formData.thresholdValue}%`}
+                            {alertType === 'market_cap_decrease' && `Market Cap decreases by ${formData.thresholdValue}%`}
+                        </div>
+                    </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex space-x-2 pt-2">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="flex-1 bg-slate-600 hover:bg-slate-500 text-white text-sm py-2 rounded transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isLoading || formData.thresholdValue <= 0}
+                        className="flex-1 bg-cyan-500 hover:bg-cyan-400 text-white text-sm py-2 rounded transition-colors disabled:opacity-50"
+                    >
+                        {isLoading ? 'Creating...' : 'Create Alert'}
+                    </button>
+                </div>
+            </form>
+        );
+    }
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             {/* Token Address */}
@@ -134,7 +365,7 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                     />
                     <button
                         type="button"
-                        onClick={validateTokenAddress}
+                        onClick={() => validateTokenAddress()}
                         disabled={isLoading || !formData.tokenAddress}
                         className="btn-secondary whitespace-nowrap"
                     >
@@ -227,31 +458,30 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
 
                 {formData.notificationType === 'email' && !user?.email && (
                     <p className="text-sm text-amber-600 mt-1">
-                        ⚠️ Please configure your email in profile settings
+                        Please configure your email in profile settings first
                     </p>
                 )}
 
                 {formData.notificationType === 'telegram' && !user?.telegramChatId && (
                     <p className="text-sm text-amber-600 mt-1">
-                        ⚠️ Please configure your Telegram in profile settings
+                        Please configure your Telegram in profile settings first
                     </p>
                 )}
             </div>
 
-            {/* Buttons */}
-            <div className="flex justify-end space-x-3 pt-4">
+            {/* Action Buttons */}
+            <div className="flex space-x-3">
                 <button
                     type="button"
                     onClick={onCancel}
-                    className="btn-secondary"
-                    disabled={isLoading}
+                    className="flex-1 btn-outline"
                 >
                     Cancel
                 </button>
                 <button
                     type="submit"
-                    className="btn-primary"
-                    disabled={isLoading || !tokenInfo?.isValid}
+                    disabled={isLoading}
+                    className="flex-1 btn-primary"
                 >
                     {isLoading ? 'Creating...' : 'Create Alert'}
                 </button>

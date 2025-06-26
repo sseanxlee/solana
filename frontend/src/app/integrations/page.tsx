@@ -17,36 +17,30 @@ interface IntegrationStatus {
 }
 
 function IntegrationsContent() {
-    const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+    const { isAuthenticated, isLoading: authLoading, user } = useAuth();
     const router = useRouter();
-
-    // Mock data for integrations - replace with real API calls later
     const [integrations, setIntegrations] = useState<IntegrationStatus[]>([
         {
             id: 'telegram',
             name: 'Telegram Bot',
             description: 'Chat with @stridesol_bot to create price & market cap alerts with simple commands',
-            isConnected: !!user?.telegramChatId,
+            isConnected: false,
             icon: (
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
                 </svg>
-            ),
-            connectedAccount: user?.telegramChatId ? `Chat ID: ${user.telegramChatId}` : undefined,
-            lastUsed: user?.telegramChatId ? 'Connected' : undefined
+            )
         },
         {
             id: 'email',
             name: 'Email Notifications',
-            description: 'Receive detailed alert reports and summaries via email',
-            isConnected: !!user?.email,
+            description: 'Receive alert notifications via email',
+            isConnected: false,
             icon: (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
-            ),
-            connectedAccount: user?.email || undefined,
-            lastUsed: user?.email ? 'Available' : undefined
+            )
         }
     ]);
 
@@ -57,24 +51,24 @@ function IntegrationsContent() {
         }
     }, [isAuthenticated, authLoading, router]);
 
-    // Update integrations when user data changes
+    // Update integrations when user data changes (for initial load if user already has telegram connected)
     useEffect(() => {
         setIntegrations(prev =>
             prev.map(integration => {
-                if (integration.id === 'telegram') {
+                if (integration.id === 'telegram' && user?.telegramChatId) {
                     return {
                         ...integration,
-                        isConnected: !!user?.telegramChatId,
-                        connectedAccount: user?.telegramChatId ? `Chat ID: ${user.telegramChatId}` : undefined,
-                        lastUsed: user?.telegramChatId ? 'Connected' : undefined
+                        isConnected: true,
+                        connectedAccount: `Chat ID: ${user.telegramChatId}`,
+                        lastUsed: 'Connected'
                     };
                 }
-                if (integration.id === 'email') {
+                if (integration.id === 'email' && user?.email) {
                     return {
                         ...integration,
-                        isConnected: !!user?.email,
-                        connectedAccount: user?.email || undefined,
-                        lastUsed: user?.email ? 'Available' : undefined
+                        isConnected: true,
+                        connectedAccount: user.email,
+                        lastUsed: 'Available'
                     };
                 }
                 return integration;
@@ -91,6 +85,21 @@ function IntegrationsContent() {
                 return;
             }
 
+            // Immediately update the integration status to show as connected
+            setIntegrations(prev =>
+                prev.map(integration => {
+                    if (integration.id === 'telegram') {
+                        return {
+                            ...integration,
+                            isConnected: true,
+                            connectedAccount: 'Connecting...',
+                            lastUsed: 'Just connected'
+                        };
+                    }
+                    return integration;
+                })
+            );
+
             const botUrl = `https://t.me/stridesol_bot?start=${encodeURIComponent(walletAddress)}`;
             window.open(botUrl, '_blank');
 
@@ -101,6 +110,24 @@ function IntegrationsContent() {
                 </div>,
                 { duration: 4000, icon: '🤖' }
             );
+
+            // After a short delay, update with proper connection info
+            setTimeout(() => {
+                setIntegrations(prev =>
+                    prev.map(integration => {
+                        if (integration.id === 'telegram') {
+                            return {
+                                ...integration,
+                                isConnected: true,
+                                connectedAccount: `Connected via ${walletAddress.slice(0, 6)}...${walletAddress.slice(-6)}`,
+                                lastUsed: 'Connected'
+                            };
+                        }
+                        return integration;
+                    })
+                );
+            }, 2000);
+
         } else if (integrationId === 'email') {
             toast('Email integration is managed in Settings', { icon: 'ℹ️' });
         } else {

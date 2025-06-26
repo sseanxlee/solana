@@ -527,6 +527,24 @@ class ApiService {
         return this.request('GET', '/admin/stats');
     }
 
+    async getMonitoringStatus(): Promise<ApiResponse<{
+        system: {
+            totalActiveAlerts: number;
+            uniqueTokens: number;
+            botRunning: boolean;
+        };
+        user: {
+            activeAlerts: number;
+            tokens: Array<{
+                token_address: string;
+                token_name: string;
+                token_symbol: string;
+            }>;
+        };
+    }>> {
+        return this.request('GET', '/alerts/monitoring/status');
+    }
+
     async forceCheck(tokenAddress?: string): Promise<ApiResponse<{
         alertsChecked: number;
     }>> {

@@ -2,6 +2,7 @@ import sgMail from '@sendgrid/mail';
 import { query } from '../config/database';
 import { NotificationQueue, TokenAlert } from '../types';
 import { TelegramBotService } from './telegramBotService';
+import { DiscordBotService } from './discordBotService';
 
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'alerts@solana-alerts.com';
@@ -14,9 +15,11 @@ if (SENDGRID_API_KEY) {
 
 export class NotificationService {
     private telegramBotService: TelegramBotService;
+    private discordBotService: DiscordBotService;
 
     constructor() {
         this.telegramBotService = TelegramBotService.getInstance();
+        this.discordBotService = DiscordBotService.getInstance();
     }
 
     async sendAlertNotification(alert: TokenAlert, currentPrice: number): Promise<boolean> {
@@ -24,6 +27,7 @@ export class NotificationService {
             // Check if the notification type is enabled
             const emailEnabled = process.env.ENABLE_EMAIL_NOTIFICATIONS !== 'false';
             const telegramEnabled = process.env.ENABLE_TELEGRAM_NOTIFICATIONS !== 'false';
+            const discordEnabled = process.env.ENABLE_DISCORD_NOTIFICATIONS !== 'false';
 
             if (alert.notification_type === 'email' && !emailEnabled) {
                 console.log('Email notifications are disabled, skipping email alert');
@@ -32,6 +36,11 @@ export class NotificationService {
 
             if (alert.notification_type === 'telegram' && !telegramEnabled) {
                 console.log('Telegram notifications are disabled, skipping telegram alert');
+                return false;
+            }
+
+            if (alert.notification_type === 'discord' && !discordEnabled) {
+                console.log('Discord notifications are disabled, skipping discord alert');
                 return false;
             }
 
@@ -45,6 +54,8 @@ export class NotificationService {
                 return await this.sendEmail(alert, subject, message, queueId);
             } else if (alert.notification_type === 'telegram') {
                 return await this.sendTelegram(alert, message, queueId);
+            } else if (alert.notification_type === 'discord') {
+                return await this.sendDiscord(alert, message, queueId);
             }
 
             return false;
@@ -59,9 +70,16 @@ export class NotificationService {
         subject: string,
         message: string
     ): Promise<string> {
-        const recipient = alert.notification_type === 'email'
-            ? await this.getUserEmail(alert.user_id)
-            : await this.getUserTelegramChatId(alert.user_id);
+        let recipient: string | null;
+        if (alert.notification_type === 'email') {
+            recipient = await this.getUserEmail(alert.user_id);
+        } else if (alert.notification_type === 'telegram') {
+            recipient = await this.getUserTelegramChatId(alert.user_id);
+        } else if (alert.notification_type === 'discord') {
+            recipient = await this.getUserDiscordId(alert.user_id);
+        } else {
+            recipient = null;
+        }
 
         const result = await query(
             `INSERT INTO notification_queue (alert_id, type, recipient, subject, message)
@@ -180,7 +198,44 @@ export class NotificationService {
             console.error('Error fetching user Telegram chat ID:', error);
             return null;
         }
+    }
 
+    private async getUserDiscordId(userId: string): Promise<string | null> {
+        try {
+            const result = await query(
+                'SELECT discord_user_id FROM users WHERE id = $1',
+                [userId]
+            );
+            return result.rows[0]?.discord_user_id || null;
+        } catch (error) {
+            console.error('Error fetching user Discord ID:', error);
+            return null;
+        }
+    }
+
+    private async sendDiscord(
+        alert: TokenAlert,
+        message: string,
+        queueId: string
+    ): Promise<boolean> {
+        try {
+            const discordUserId = await this.getUserDiscordId(alert.user_id);
+            if (!discordUserId) {
+                console.error('User Discord ID not found');
+                await this.updateQueueStatus(queueId, 'failed');
+                return false;
+            }
+
+            await this.discordBotService.sendMessage(discordUserId, message);
+
+            await this.updateQueueStatus(queueId, 'sent');
+            console.log(`Discord message sent successfully to ${discordUserId}`);
+            return true;
+        } catch (error) {
+            console.error('Error sending Discord message:', error);
+            await this.updateQueueStatus(queueId, 'failed');
+            return false;
+        }
     }
 
     private generateAlertMessage(alert: TokenAlert, currentPrice: number): string {

@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import alertRoutes from './routes/alerts';
 import tokenRoutes from './routes/tokens';
 import { TelegramBotService } from './services/telegramBotService';
+import { DiscordBotService } from './services/discordBotService';
 import { SolanaStreamingService } from './services/solanaStreamingService';
 import { SolPriceService } from './services/solPriceService';
 
@@ -20,6 +21,7 @@ const PORT = process.env.API_PORT || 3001;
 
 // Initialize services (singletons)
 const telegramBotService = TelegramBotService.getInstance();
+const discordBotService = DiscordBotService.getInstance();
 const solanaStreamingService = SolanaStreamingService.getInstance();
 const solPriceService = SolPriceService.getInstance();
 
@@ -96,6 +98,7 @@ app.get('/api/admin/stats', async (req, res) => {
             success: true,
             data: {
                 telegramBotRunning: telegramBotService.isRunningBot(),
+                discordBotRunning: discordBotService.isRunningBot(),
                 message: "Monitoring service disabled - basic bot only"
             }
         });
@@ -133,6 +136,7 @@ const gracefulShutdown = (signal: string) => {
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
     telegramBotService.stop();
+    discordBotService.stop();
     solPriceService.stopPriceUpdates();
 
     process.exit(0);
@@ -147,8 +151,9 @@ app.listen(PORT, () => {
     console.log(`[STRIDE] Health check: http://localhost:${PORT}/health`);
     console.log(`[STRIDE] API base URL: http://localhost:${PORT}/api`);
 
-    // Start Telegram bot service only
+    // Start Telegram and Discord bot services only
     telegramBotService.start();
+    discordBotService.start();
 });
 
 export default app; 

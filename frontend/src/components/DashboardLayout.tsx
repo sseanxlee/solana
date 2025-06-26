@@ -9,6 +9,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import SearchModal from './SearchModal';
 import { TokenData } from '../services/api';
+import { followedTokensService, FollowedToken } from '../services/followedTokens';
+import TokenLogo from './TokenLogo';
 
 interface SearchHistoryItem extends TokenData {
     search_timestamp: number;
@@ -37,6 +39,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [searchHistory, setSearchHistory] = useState<SearchHistoryItem[]>([]);
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [followedTokens, setFollowedTokens] = useState<FollowedToken[]>([]);
 
     useEffect(() => {
         // Load search history from localStorage
@@ -57,6 +60,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 console.error('Error loading search history:', error);
             }
         }
+
+        // Load followed tokens
+        setFollowedTokens(followedTokensService.getFollowedTokens());
+
+        // Listen for storage changes to update followed tokens across tabs
+        const handleStorageChange = (event: StorageEvent) => {
+            if (event.key === 'stride_followed_tokens') {
+                setFollowedTokens(followedTokensService.getFollowedTokens());
+            }
+        };
+
+        // Listen for custom follow/unfollow events within the same tab
+        const handleFollowChange = () => {
+            setFollowedTokens(followedTokensService.getFollowedTokens());
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener('followedTokensChanged', handleFollowChange);
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener('followedTokensChanged', handleFollowChange);
+        };
     }, []);
 
     const handleSignOut = async () => {
@@ -77,6 +102,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const handleUpdateSearchHistory = (newHistory: SearchHistoryItem[]) => {
         setSearchHistory(newHistory);
         localStorage.setItem('token_search_history', JSON.stringify(newHistory));
+    };
+
+    const handleFollowedTokenClick = (tokenAddress: string) => {
+        router.push(`/search?token=${tokenAddress}`);
+    };
+
+    const handleUnfollowToken = (tokenAddress: string, event: React.MouseEvent) => {
+        event.stopPropagation(); // Prevent navigation
+        followedTokensService.unfollowToken(tokenAddress);
+        setFollowedTokens(followedTokensService.getFollowedTokens());
+        toast.success('Token unfollowed');
     };
 
     const navItems = [
@@ -152,48 +188,55 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="flex flex-1 relative">
                     {/* Sidebar */}
                     <aside className={`${sidebarCollapsed ? 'w-16' : 'w-64'
-                        } bg-gray-900/20 border-r border-gray-800/30 flex flex-col transition-all duration-300 ease-in-out fixed top-0 left-0 h-full z-30 overflow-y-auto`}>
+                        } bg-gray-900/20 border-r border-gray-800/30 flex flex-col transition-all duration-300 ease-in-out fixed top-0 left-0 h-full z-30 overflow-y-auto overflow-x-hidden`}>
                         {/* Logo and Toggle */}
-                        <div className="flex items-center justify-between p-4 flex-shrink-0">
-                            {!sidebarCollapsed && (
-                                <Link href="/dashboard" className="flex items-center space-x-3">
-                                    <img src="/logo.svg" alt="Stride Logo" className="w-6 h-6 text-primary-600" />
-                                    <span className="text-lg font-bold text-gray-100 font-heading">Stride</span>
+                        <div className="flex items-center justify-between p-4 flex-shrink-0 h-20">
+                            <div className="flex items-center flex-1 min-w-0 overflow-hidden">
+                                <Link href="/dashboard" className="flex items-center space-x-3 min-w-0">
+                                    <img src="/logo.png" alt="Logo" className="w-12 h-12 filter invert flex-shrink-0" />
+                                    <span
+                                        className={`text-xl font-bold text-gray-100 font-heading whitespace-nowrap transition-all duration-300 ease-in-out ${sidebarCollapsed
+                                            ? 'opacity-0 -translate-x-4 w-0'
+                                            : 'opacity-100 translate-x-0 w-auto'
+                                            }`}
+                                        style={{ transitionProperty: 'opacity, transform, width' }}
+                                    >
+                                        Stride
+                                    </span>
                                 </Link>
-                            )}
-                            {sidebarCollapsed && (
-                                <Link href="/dashboard" className="flex items-center justify-center w-full">
-                                    <img src="/logo.svg" alt="Stride Logo" className="w-6 h-6 text-primary-600" />
-                                </Link>
-                            )}
+                            </div>
                             <button
                                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                                className="p-1 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 transition-colors"
+                                className="p-1 rounded-md text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 transition-colors flex-shrink-0 ml-2"
                                 aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                             >
-                                <svg className={`w-4 h-4 transform transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className={`w-4 h-4 transform transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                 </svg>
                             </button>
                         </div>
 
-                        {/* Padding above Search */}
-                        <div className="py-4"></div>
-
                         {/* Search Button */}
-                        {!sidebarCollapsed && (
-                            <div className="px-4 mb-4 flex-shrink-0">
-                                <button
-                                    onClick={() => setIsSearchModalOpen(true)}
-                                    className="flex items-center space-x-2 bg-gray-800/60 hover:bg-gray-700/80 text-gray-300 hover:text-white px-4 py-2 rounded-lg transition-colors text-sm w-full justify-center"
+                        <div className="px-4 mb-4 flex-shrink-0">
+                            <button
+                                onClick={() => setIsSearchModalOpen(true)}
+                                className="flex items-center text-gray-300 hover:text-gray-100 hover:bg-gray-800/30 px-3 py-2.5 rounded-lg transition-colors text-sm w-full"
+                                title={sidebarCollapsed ? 'Search' : undefined}
+                            >
+                                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <span
+                                    className={`font-medium font-body whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden ${sidebarCollapsed
+                                        ? 'opacity-0 -translate-x-2 w-0 ml-0'
+                                        : 'opacity-100 translate-x-0 w-auto ml-3'
+                                        }`}
+                                    style={{ transitionProperty: 'opacity, transform, width, margin-left' }}
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
-                                    <span>Search</span>
-                                </button>
-                            </div>
-                        )}
+                                    Search
+                                </span>
+                            </button>
+                        </div>
 
                         {/* Navigation */}
                         <nav className="px-4 space-y-1 flex-shrink-0">
@@ -203,22 +246,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                     <Link
                                         key={item.href}
                                         href={item.href}
-                                        className={`flex items-center rounded-lg transition-colors text-sm ${sidebarCollapsed
-                                            ? `justify-center px-3 py-2.5 ${isActive
-                                                ? 'bg-primary-600/15 text-primary-300 border border-primary-500/20'
-                                                : 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/30'
-                                            }`
-                                            : `space-x-3 px-3 py-2.5 ${isActive
-                                                ? 'bg-primary-600/15 text-primary-300 border border-primary-500/20'
-                                                : 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/30'
-                                            }`
+                                        className={`flex items-center rounded-lg transition-all duration-200 ease-in-out text-sm px-3 py-2.5 ${isActive
+                                            ? 'bg-primary-600/15 text-primary-300 border border-primary-500/20'
+                                            : 'text-gray-300 hover:text-gray-100 hover:bg-gray-800/30'
                                             }`}
                                         title={sidebarCollapsed ? item.label : undefined}
                                     >
                                         <span className="flex-shrink-0">{item.icon}</span>
-                                        {!sidebarCollapsed && (
-                                            <span className="font-medium font-body">{item.label}</span>
-                                        )}
+                                        <span
+                                            className={`font-medium font-body whitespace-nowrap transition-all duration-300 ease-in-out ${sidebarCollapsed
+                                                ? 'opacity-0 -translate-x-2 w-0 ml-0'
+                                                : 'opacity-100 translate-x-0 w-auto ml-3'
+                                                }`}
+                                            style={{ transitionProperty: 'opacity, transform, width, margin-left' }}
+                                        >
+                                            {item.label}
+                                        </span>
                                     </Link>
                                 );
                             })}
@@ -233,12 +276,47 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 font-heading">
                                     Followed Tokens
                                 </h3>
-                                <div className="text-center py-6">
-                                    <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                    </svg>
-                                    <p className="text-xs text-gray-500">No tokens followed yet</p>
-                                </div>
+                                {followedTokens.length === 0 ? (
+                                    <div className="text-center py-6">
+                                        <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                        </svg>
+                                        <p className="text-xs text-gray-500">No tokens followed yet</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                                        {followedTokens.map((token) => (
+                                            <div
+                                                key={token.address}
+                                                onClick={() => handleFollowedTokenClick(token.address)}
+                                                className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-800/30 cursor-pointer transition-colors group"
+                                            >
+                                                <TokenLogo
+                                                    tokenAddress={token.address}
+                                                    tokenSymbol={token.symbol}
+                                                    size="sm"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-medium text-gray-200 truncate">
+                                                        {token.symbol}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 truncate">
+                                                        {token.name}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={(e) => handleUnfollowToken(token.address, e)}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-500 hover:text-red-400 transition-all"
+                                                    title="Unfollow"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -251,20 +329,27 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         <div className="p-4 border-t border-gray-800/30 flex-shrink-0 mt-auto">
                             <button
                                 onClick={handleSignOut}
-                                className={`flex items-center space-x-3 w-full px-3 py-2.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 rounded-lg transition-colors text-sm ${sidebarCollapsed ? 'justify-center' : ''
-                                    }`}
+                                className="flex items-center w-full px-3 py-2.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800/30 rounded-lg transition-colors text-sm"
                                 title={sidebarCollapsed ? 'Disconnect' : undefined}
                             >
                                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
-                                {!sidebarCollapsed && <span className="font-medium font-body">Disconnect</span>}
+                                <span
+                                    className={`font-medium font-body whitespace-nowrap transition-all duration-300 ease-in-out overflow-hidden ${sidebarCollapsed
+                                        ? 'opacity-0 -translate-x-2 w-0 ml-0'
+                                        : 'opacity-100 translate-x-0 w-auto ml-3'
+                                        }`}
+                                    style={{ transitionProperty: 'opacity, transform, width, margin-left' }}
+                                >
+                                    Disconnect
+                                </span>
                             </button>
                         </div>
                     </aside>
 
                     {/* Main Content */}
-                    <main className={`flex-1 p-6 overflow-auto transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-64'
+                    <main className={`flex-1 p-6 overflow-auto transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'ml-16' : 'ml-64'
                         }`}>
                         {children}
                     </main>

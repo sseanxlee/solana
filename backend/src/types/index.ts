@@ -3,6 +3,7 @@ export interface User {
     wallet_address: string;
     email?: string;
     telegram_chat_id?: string;
+    discord_user_id?: string;
     created_at: Date;
     updated_at: Date;
 }
@@ -16,7 +17,7 @@ export interface TokenAlert {
     threshold_type: 'price' | 'market_cap';
     threshold_value: number;
     condition: 'above' | 'below';
-    notification_type: 'email' | 'telegram';
+    notification_type: 'email' | 'telegram' | 'discord';
     is_active: boolean;
     is_triggered: boolean;
     triggered_at?: Date;
@@ -95,7 +96,7 @@ export interface TokenPairsResponse {
 export interface NotificationQueue {
     id: string;
     alert_id: string;
-    type: 'email' | 'telegram';
+    type: 'email' | 'telegram' | 'discord';
     recipient: string;
     subject: string;
     message: string;

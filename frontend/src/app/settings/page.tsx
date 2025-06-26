@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { apiService } from '../../services/api';
+import { presetSettingsService, PresetSettings } from '../../services/presetSettings';
 import DashboardLayout from '../../components/DashboardLayout';
 import toast from 'react-hot-toast';
 
@@ -12,6 +13,11 @@ export default function SettingsPage() {
     const router = useRouter();
     const [isUpdating, setIsUpdating] = useState(false);
     const [email, setEmail] = useState(user?.email || '');
+
+    // Preset settings state
+    const [presets, setPresets] = useState<PresetSettings>(presetSettingsService.getPresets());
+    const [newMarketCapPreset, setNewMarketCapPreset] = useState('');
+    const [newPercentagePreset, setNewPercentagePreset] = useState('');
 
     useEffect(() => {
         if (!isLoading && !isAuthenticated) {
@@ -52,7 +58,66 @@ export default function SettingsPage() {
         }
     };
 
+    // Preset management functions
+    const addMarketCapPreset = () => {
+        if (!newMarketCapPreset.trim()) return;
 
+        const updatedPresets = {
+            ...presets,
+            marketCapPresets: [...presets.marketCapPresets, newMarketCapPreset.trim()]
+        };
+
+        setPresets(updatedPresets);
+        presetSettingsService.updatePresets(updatedPresets);
+        setNewMarketCapPreset('');
+        toast.success('Market cap preset added!');
+    };
+
+    const removeMarketCapPreset = (index: number) => {
+        const updatedPresets = {
+            ...presets,
+            marketCapPresets: presets.marketCapPresets.filter((_, i) => i !== index)
+        };
+
+        setPresets(updatedPresets);
+        presetSettingsService.updatePresets(updatedPresets);
+        toast.success('Market cap preset removed!');
+    };
+
+    const addPercentagePreset = () => {
+        const value = parseFloat(newPercentagePreset);
+        if (isNaN(value) || value <= 0) {
+            toast.error('Please enter a valid positive number');
+            return;
+        }
+
+        const updatedPresets = {
+            ...presets,
+            percentagePresets: [...presets.percentagePresets, value].sort((a, b) => a - b)
+        };
+
+        setPresets(updatedPresets);
+        presetSettingsService.updatePresets(updatedPresets);
+        setNewPercentagePreset('');
+        toast.success('Percentage preset added!');
+    };
+
+    const removePercentagePreset = (index: number) => {
+        const updatedPresets = {
+            ...presets,
+            percentagePresets: presets.percentagePresets.filter((_, i) => i !== index)
+        };
+
+        setPresets(updatedPresets);
+        presetSettingsService.updatePresets(updatedPresets);
+        toast.success('Percentage preset removed!');
+    };
+
+    const resetPresetsToDefault = () => {
+        const defaultPresets = presetSettingsService.resetToDefaults();
+        setPresets(defaultPresets);
+        toast.success('Presets reset to defaults!');
+    };
 
     if (isLoading || !isAuthenticated) {
         return (
@@ -248,6 +313,125 @@ export default function SettingsPage() {
                                 {user?.telegramChatId ? 'Connected' : 'Not connected'}
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* Alert Presets */}
+                <div className="card-elevated">
+                    <h2 className="text-xl font-semibold text-gray-100 mb-4">Alert Presets</h2>
+
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
+                            <div>
+                                <h3 className="text-gray-200 font-medium">Market Cap Presets</h3>
+                                <p className="text-gray-400 text-sm">Customize market cap presets for alerts</p>
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${presets.marketCapPresets.length > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {presets.marketCapPresets.length > 0 ? 'Configured' : 'Not configured'}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
+                            <div>
+                                <h3 className="text-gray-200 font-medium">Percentage Presets</h3>
+                                <p className="text-gray-400 text-sm">Customize percentage presets for alerts</p>
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${presets.percentagePresets.length > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {presets.percentagePresets.length > 0 ? 'Configured' : 'Not configured'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Market Cap Presets Management */}
+                    <div className="mt-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-medium text-gray-200 mb-3">Market Cap Presets</h3>
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {presets.marketCapPresets.map((preset, index) => (
+                                        <div key={index} className="flex items-center bg-slate-700 rounded-lg px-3 py-2">
+                                            <span className="text-white text-sm">{preset}</span>
+                                            <button
+                                                onClick={() => removeMarketCapPreset(index)}
+                                                className="ml-2 text-red-400 hover:text-red-300 transition-colors"
+                                                title="Remove preset"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="text"
+                                        value={newMarketCapPreset}
+                                        onChange={(e) => setNewMarketCapPreset(e.target.value)}
+                                        placeholder="e.g., 50M, 2.5B"
+                                        className="input-field flex-1"
+                                        onKeyPress={(e) => e.key === 'Enter' && addMarketCapPreset()}
+                                    />
+                                    <button
+                                        onClick={addMarketCapPreset}
+                                        disabled={!newMarketCapPreset.trim()}
+                                        className="btn-primary disabled:opacity-50"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-lg font-medium text-gray-200 mb-3">Percentage Presets</h3>
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {presets.percentagePresets.map((preset, index) => (
+                                        <div key={index} className="flex items-center bg-slate-700 rounded-lg px-3 py-2">
+                                            <span className="text-white text-sm">{preset}%</span>
+                                            <button
+                                                onClick={() => removePercentagePreset(index)}
+                                                className="ml-2 text-red-400 hover:text-red-300 transition-colors"
+                                                title="Remove preset"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="number"
+                                        value={newPercentagePreset}
+                                        onChange={(e) => setNewPercentagePreset(e.target.value)}
+                                        placeholder="e.g., 75, 150"
+                                        className="input-field flex-1"
+                                        min="0"
+                                        step="0.1"
+                                        onKeyPress={(e) => e.key === 'Enter' && addPercentagePreset()}
+                                    />
+                                    <button
+                                        onClick={addPercentagePreset}
+                                        disabled={!newPercentagePreset.trim()}
+                                        className="btn-primary disabled:opacity-50"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-6">
+                        <button
+                            onClick={resetPresetsToDefault}
+                            className="btn-secondary text-red-400 border-red-500/30 hover:bg-red-950/30"
+                        >
+                            Reset Presets to Default
+                        </button>
                     </div>
                 </div>
             </div>
