@@ -1,0 +1,27 @@
+Chrome Extension Icon Requirements:
+
+You need to create 4 PNG files with these exact names:
+- icon16.png (16x16 pixels)
+- icon32.png (32x32 pixels) 
+- icon48.png (48x48 pixels)
+- icon128.png (128x128 pixels)
+
+Quick Solutions:
+
+1. EASIEST - Download ready-made icons:
+   - Visit: https://www.flaticon.com/free-icon/chrome_888846
+   - Download PNG in all 4 sizes
+   - Rename them to match the required names
+
+2. FAST - Create simple colored squares:
+   - Open any image editor (Preview, Photoshop, GIMP, etc.)
+   - Create new images with the specified dimensions
+   - Fill with any color (blue, green, etc.)
+   - Save as PNG files with the exact names
+
+3. ONLINE - Use a free icon generator:
+   - Visit: https://favicon.io/favicon-generator/
+   - Create an icon and download all sizes
+   - Rename files to match requirements
+
+Without these icon files, Chrome will show an error when loading the extension.

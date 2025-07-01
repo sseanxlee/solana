@@ -1741,10 +1741,10 @@ You'll be notified when the market cap goes ${condition} your target!`;
             const affectedTokens = [...new Set(alertsResult.rows.map(alert => alert.token_address))];
             console.log(`[CLEANUP] Affected tokens: ${affectedTokens.map(addr => addr.slice(0, 8) + '...').join(', ')}`);
 
-            // Delete all alerts for this user
+            // Clear all alerts for this user (mark as cleared instead of triggered)
             const deleteResult = await query(`
                 UPDATE token_alerts 
-                SET is_active = false, is_triggered = true 
+                SET is_active = false, is_triggered = true, cleared_at = CURRENT_TIMESTAMP 
                 WHERE id IN (
                     SELECT ta.id 
                     FROM token_alerts ta 

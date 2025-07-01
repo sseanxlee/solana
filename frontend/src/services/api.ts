@@ -29,6 +29,7 @@ interface TokenAlert {
     is_active: boolean;
     is_triggered: boolean;
     triggered_at?: string;
+    cleared_at?: string;
     created_at: string;
     updated_at: string;
 }

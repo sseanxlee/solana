@@ -1,0 +1,217 @@
+/* Font import moved to HTML for better loading */
+
+#stride-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: 999999;
+    pointer-events: none;
+    animation: strideOverlayFadeIn 0.3s ease-out;
+}
+
+.stride-overlay-content {
+    background: #0f172a;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 0;
+    width: 300px;
+    height: 120px;
+    min-width: 200px;
+    min-height: 100px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.6);
+    pointer-events: all;
+    overflow: hidden;
+    animation: strideContentSlideIn 0.3s ease-out;
+    resize: none;
+    /* Disable browser default resize */
+}
+
+.stride-header {
+    background: #1e293b;
+    border-bottom: 1px solid #475569;
+    padding: 8px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: grab;
+    user-select: none;
+    border-radius: 7px 7px 0 0;
+    height: 20px;
+    position: relative;
+}
+
+.stride-header:active {
+    cursor: grabbing;
+}
+
+.stride-header h2 {
+    font-size: 14px;
+    font-weight: 500;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    color: #f1f5f9;
+    font-family: 'Exo 2', 'Segoe UI', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-align: center;
+}
+
+.stride-close-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 16px;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    font-weight: normal;
+    padding: 0;
+    line-height: 1;
+    margin-left: auto;
+}
+
+.stride-close-btn:hover {
+    background: #334155;
+    color: #f1f5f9;
+}
+
+.stride-body {
+    padding: 8px 10px;
+    background: #0f172a;
+    border-radius: 0 0 7px 7px;
+    height: calc(100% - 38px);
+    overflow: auto;
+}
+
+.stride-token-info {
+    padding: 8px 0;
+    border-radius: 4px;
+    margin-bottom: 0;
+    border: none;
+    overflow-wrap: break-word;
+    word-break: break-all;
+    height: calc(100% - 16px);
+    overflow: auto;
+}
+
+.token-address {
+    color: #cbd5e1;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    margin: 0;
+    overflow-wrap: break-word;
+    word-break: break-all;
+    user-select: all;
+    line-height: 1.4;
+}
+
+.stride-body p {
+    color: #cbd5e1;
+    font-family: 'Funnel Sans', 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0 0 24px 0;
+}
+
+.stride-btn {
+    background: #475569;
+    border: 2px solid #64748b;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Exo 2', 'Segoe UI', sans-serif;
+    color: #f1f5f9;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.stride-btn:hover {
+    background: #64748b;
+    border-color: #94a3b8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+}
+
+.stride-btn:active {
+    transform: translateY(0);
+    background: #334155;
+    border-color: #475569;
+}
+
+/* Resize handles */
+.stride-resize-handle {
+    position: absolute;
+    background: transparent;
+    z-index: 10;
+}
+
+.stride-resize-se {
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    cursor: se-resize;
+    background: linear-gradient(-45deg, transparent 0%, transparent 30%, #64748b 30%, #64748b 40%, transparent 40%, transparent 60%, #64748b 60%, #64748b 70%, transparent 70%);
+}
+
+.stride-resize-s {
+    bottom: 0;
+    left: 8px;
+    right: 12px;
+    height: 4px;
+    cursor: s-resize;
+}
+
+.stride-resize-e {
+    top: 8px;
+    right: 0;
+    bottom: 12px;
+    width: 4px;
+    cursor: e-resize;
+}
+
+.stride-resize-handle:hover {
+    background-color: rgba(100, 116, 139, 0.3);
+}
+
+.stride-resize-se:hover {
+    background: linear-gradient(-45deg, transparent 0%, transparent 20%, #94a3b8 20%, #94a3b8 30%, transparent 30%, transparent 50%, #94a3b8 50%, #94a3b8 60%, transparent 60%, transparent 80%, #94a3b8 80%, #94a3b8 90%, transparent 90%);
+}
+
+@keyframes strideOverlayFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes strideContentSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}

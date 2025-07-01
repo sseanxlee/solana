@@ -173,6 +173,14 @@ const createTables = async () => {
       console.log('Note: Could not update notification_queue type constraint:', error.message);
     }
 
+    // Add cleared_at column to token_alerts table
+    try {
+      await query('ALTER TABLE token_alerts ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMP;');
+      console.log('Successfully added cleared_at column to token_alerts');
+    } catch (error: any) {
+      console.log('Note: Could not add cleared_at column (may already exist):', error.message);
+    }
+
     console.log('Database migration completed successfully!');
   } catch (error) {
     console.error('Database migration failed:', error);

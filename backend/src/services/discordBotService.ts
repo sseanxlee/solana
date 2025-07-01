@@ -157,6 +157,14 @@ export class DiscordBotService {
             new SlashCommandBuilder()
                 .setName('link')
                 .setDescription('Link your Discord account to the web app for synced alerts'),
+
+            new SlashCommandBuilder()
+                .setName('stopalert')
+                .setDescription('Stop all market cap monitoring'),
+
+            new SlashCommandBuilder()
+                .setName('alertstatus')
+                .setDescription('Check detailed alert status and system monitoring info'),
         ];
 
         try {
@@ -241,6 +249,12 @@ export class DiscordBotService {
                 case 'link':
                     await this.handleLinkCommand(interaction);
                     break;
+                case 'stopalert':
+                    await this.handleStopAlertCommand(interaction);
+                    break;
+                case 'alertstatus':
+                    await this.handleAlertStatusCommand(interaction);
+                    break;
                 default:
                     await interaction.reply('Unknown command!');
             }
@@ -284,7 +298,7 @@ export class DiscordBotService {
                 },
                 {
                     name: '📊 Alert Management',
-                    value: '`/alerts` - View your active alerts\n`/prices` - Show current prices\n`/clear` - Clear all alerts'
+                    value: '`/alerts` - View your active alerts\n`/alertstatus` - Detailed alert status\n`/prices` - Show current prices\n`/clear` - Clear all alerts\n`/stopalert` - Stop monitoring system'
                 },
                 {
                     name: '💡 How to Use',
@@ -327,7 +341,7 @@ export class DiscordBotService {
                     })
                     .setTimestamp();
 
-                await interaction.reply({ embeds: [embed] });
+                await interaction.editReply({ embeds: [embed] });
                 return;
             }
 
@@ -347,7 +361,12 @@ export class DiscordBotService {
                     ? `$${this.formatPrice(alert.threshold_value)}`
                     : this.formatLargeNumber(alert.threshold_value);
 
-                const status = alert.is_triggered ? '✅ Triggered' : '🟢 Active';
+                // Handle different status types
+                let status = '🟢 Active';
+                if (alert.is_triggered) {
+                    status = alert.cleared_at ? '🗑️ Cleared' : '✅ Triggered';
+                }
+
                 const shortAddress = `${alert.token_address.slice(0, 6)}...${alert.token_address.slice(-6)}`;
 
                 description += `**${alertCount}. ${alert.token_name || 'Unknown'} (${alert.token_symbol || 'N/A'})**\n`;
@@ -366,11 +385,18 @@ export class DiscordBotService {
 
             // Add summary field
             const activeCount = alerts.filter(a => !a.is_triggered).length;
-            const triggeredCount = alerts.filter(a => a.is_triggered).length;
+            const triggeredCount = alerts.filter(a => a.is_triggered && !a.cleared_at).length;
+            const clearedCount = alerts.filter(a => a.cleared_at).length;
+
+            let summaryValue = `🟢 Active: ${activeCount}\n✅ Triggered: ${triggeredCount}`;
+            if (clearedCount > 0) {
+                summaryValue += `\n🗑️ Cleared: ${clearedCount}`;
+            }
+            summaryValue += `\n📊 Total: ${alerts.length}`;
 
             embed.addFields({
                 name: '📈 Summary',
-                value: `🟢 Active: ${activeCount}\n✅ Triggered: ${triggeredCount}\n📊 Total: ${alerts.length}`,
+                value: summaryValue,
                 inline: true
             });
 
@@ -384,14 +410,18 @@ export class DiscordBotService {
                 const row = new ActionRowBuilder<ButtonBuilder>()
                     .addComponents(clearButton);
 
-                await interaction.reply({ embeds: [embed], components: [row] });
+                await interaction.editReply({ embeds: [embed], components: [row] });
             } else {
-                await interaction.reply({ embeds: [embed] });
+                await interaction.editReply({ embeds: [embed] });
             }
 
         } catch (error) {
             console.error('Error in /alerts command:', error);
-            await interaction.reply('❌ Error fetching your alerts. Please try again later.');
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply('❌ Error fetching your alerts. Please try again later.');
+            } else {
+                await interaction.reply('❌ Error fetching your alerts. Please try again later.');
+            }
         }
     }
 
@@ -830,6 +860,157 @@ export class DiscordBotService {
             await interaction.editReply({
                 content: '❌ Error processing link command. Please try again later.'
             });
+        }
+    }
+
+    private async handleStopAlertCommand(interaction: any): Promise<void> {
+        try {
+            await interaction.deferReply();
+
+            // Check if user is linked before allowing stop alert
+            if (!(await this.requireLinkedAccount(interaction))) return;
+
+            await this.streamingService.stopMonitoring();
+            this.tokenAlerts.clear();
+
+            const embed = new EmbedBuilder()
+                .setColor(0xFF6B6B)
+                .setTitle('🛑 Monitoring Stopped')
+                .setDescription('Market cap monitoring has been stopped.')
+                .addFields({
+                    name: '📊 Status',
+                    value: '• All monitoring halted\n• Token tracking cleared\n• Alerts remain in database'
+                })
+                .setFooter({ text: 'Monitoring will resume when new alerts are created.' })
+                .setTimestamp();
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            console.error('Error in /stopalert command:', error);
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply('❌ Error stopping monitoring. Please try again later.');
+            } else {
+                await interaction.reply('❌ Error stopping monitoring. Please try again later.');
+            }
+        }
+    }
+
+    private async handleAlertStatusCommand(interaction: any): Promise<void> {
+        try {
+            await interaction.deferReply();
+
+            // Check if user is linked before showing status
+            if (!(await this.requireLinkedAccount(interaction))) return;
+
+            const userId = interaction.user.id;
+
+            // Query database for user's active alerts
+            const alertsResult = await query(`
+                SELECT ta.*, ta.token_address, ta.token_name, ta.token_symbol, ta.threshold_value, ta.threshold_type, ta.condition
+                FROM token_alerts ta
+                JOIN users u ON ta.user_id = u.id 
+                WHERE ta.is_active = true AND ta.is_triggered = false 
+                AND u.discord_user_id = $1
+                ORDER BY ta.created_at DESC
+            `, [userId]);
+
+            if (alertsResult.rows.length === 0) {
+                const embed = new EmbedBuilder()
+                    .setColor(0xFFA500)
+                    .setTitle('📊 Alert Status')
+                    .setDescription('No active alerts.')
+                    .addFields({
+                        name: '🚀 Get Started',
+                        value: 'Use `/setalert <token_address>` to create your first alert!'
+                    })
+                    .setTimestamp();
+
+                await interaction.editReply({ embeds: [embed] });
+                return;
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle('📊 Alert Status')
+                .setTimestamp();
+
+            // Group alerts by token
+            const alertsByToken = new Map();
+            for (const alert of alertsResult.rows) {
+                const key = alert.token_address;
+                if (!alertsByToken.has(key)) {
+                    alertsByToken.set(key, {
+                        name: alert.token_name,
+                        symbol: alert.token_symbol,
+                        address: alert.token_address,
+                        alerts: []
+                    });
+                }
+                alertsByToken.get(key).alerts.push(alert);
+            }
+
+            let description = '';
+            for (const [tokenAddress, tokenData] of alertsByToken) {
+                const shortAddress = `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-6)}`;
+                description += `🪙 **${tokenData.name}** ($${tokenData.symbol})\n`;
+                description += `Address: \`${shortAddress}\`\n`;
+                description += `Active Alerts: ${tokenData.alerts.length}\n\n`;
+
+                for (const alert of tokenData.alerts) {
+                    if (alert.threshold_type === 'market_cap') {
+                        description += `• Market Cap ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
+                    } else if (alert.threshold_type === 'price_percentage') {
+                        description += `• Price ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
+                    } else if (alert.threshold_type === 'price') {
+                        description += `• Price ${alert.condition} $${this.formatPrice(alert.threshold_value)}\n`;
+                    }
+                }
+                description += '\n';
+            }
+
+            embed.setDescription(description);
+
+            const isMonitoring = this.streamingService.isMonitoring();
+            const currentToken = this.streamingService.getCurrentToken();
+
+            // Add system status field
+            let systemStatus = `Monitoring: ${isMonitoring ? '🟢 Active' : '🔴 Inactive'}\n`;
+            if (currentToken) {
+                const shortCurrentToken = `${currentToken.slice(0, 6)}...${currentToken.slice(-6)}`;
+                systemStatus += `Current Token: \`${shortCurrentToken}\`\n`;
+            }
+
+            embed.addFields({
+                name: '📡 System Status',
+                value: systemStatus,
+                inline: true
+            });
+
+            // Add tracking status
+            const trackedTokens = Array.from(this.tokenAlerts.keys());
+            let trackingStatus = '';
+            if (trackedTokens.length > 0) {
+                trackingStatus = `Actively tracking ${trackedTokens.length} token(s)`;
+            } else {
+                trackingStatus = `No tokens actively tracked`;
+            }
+
+            embed.addFields({
+                name: '🔍 Tracking Status',
+                value: trackingStatus,
+                inline: true
+            });
+
+            await interaction.editReply({ embeds: [embed] });
+
+        } catch (error) {
+            console.error('Error in /alertstatus command:', error);
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply('❌ Error fetching alert status. Please try again later.');
+            } else {
+                await interaction.reply('❌ Error fetching alert status. Please try again later.');
+            }
         }
     }
 
