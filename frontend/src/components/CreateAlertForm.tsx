@@ -21,7 +21,7 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
         thresholdType: 'price',
         thresholdValue: 0,
         condition: 'above',
-        notificationType: 'email'
+        notificationType: 'telegram' // Default to telegram instead of email
     });
 
     const [tokenInfo, setTokenInfo] = useState<{
@@ -98,16 +98,17 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
             return;
         }
 
-        // Check notification method is configured
-        if (formData.notificationType === 'email' && !user?.email) {
-            toast.error('Please configure your email in profile settings first');
-            return;
-        }
-
+        // Check notification method is configured (only for telegram now)
         if (formData.notificationType === 'telegram' && !user?.telegramChatId) {
             toast.error('Please configure your Telegram in profile settings first');
             return;
         }
+
+        // Remove email requirement for now - allow email alerts even without email configured
+        // if (formData.notificationType === 'email' && !user?.email) {
+        //     toast.error('Please configure your email in profile settings first');
+        //     return;
+        // }
 
         try {
             setIsLoading(true);
@@ -191,8 +192,8 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                 return;
             }
 
-            // Determine notification method based on user preferences
-            const notificationMethod = user?.telegramChatId ? 'telegram' : user?.email ? 'email' : 'email';
+            // Determine notification method based on user preferences (prefer telegram)
+            const notificationMethod = user?.telegramChatId ? 'telegram' : 'telegram'; // Always use telegram for now
 
             const alertData = {
                 ...formData,
@@ -452,19 +453,19 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                     onChange={(e) => handleInputChange('notificationType', e.target.value as 'email' | 'telegram')}
                     className="input-field"
                 >
-                    <option value="email">Email</option>
                     <option value="telegram">Telegram</option>
+                    <option value="email">Email (Coming Soon)</option>
                 </select>
-
-                {formData.notificationType === 'email' && !user?.email && (
-                    <p className="text-sm text-amber-600 mt-1">
-                        Please configure your email in profile settings first
-                    </p>
-                )}
 
                 {formData.notificationType === 'telegram' && !user?.telegramChatId && (
                     <p className="text-sm text-amber-600 mt-1">
                         Please configure your Telegram in profile settings first
+                    </p>
+                )}
+
+                {formData.notificationType === 'email' && (
+                    <p className="text-sm text-blue-600 mt-1">
+                        Email notifications are coming soon. Use Telegram for now.
                     </p>
                 )}
             </div>

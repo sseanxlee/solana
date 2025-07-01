@@ -1249,45 +1249,25 @@ Time: ${new Date().toLocaleString()}
         }
 
         try {
-            // Fetch fresh token data
-            const [marketData, metadata] = await Promise.allSettled([
-                this.birdeyeService.getTokenMarketData(tokenData.address),
-                this.fetchTokenMetadata(tokenData.address)
-            ]);
+            // Only fetch basic token metadata for display, NOT market cap
+            // Market cap will be fetched fresh when user actually sets their target
+            const metadata = await this.fetchTokenMetadata(tokenData.address);
 
-            let birdeyeData: BirdeyeTokenMarketData | null = null;
-            let tokenMetadata: any = null;
-
-            if (marketData.status === 'fulfilled' && marketData.value) {
-                birdeyeData = marketData.value;
-            }
-
-            if (metadata.status === 'fulfilled' && metadata.value) {
-                tokenMetadata = metadata.value;
-            }
-
-            if (!birdeyeData) {
-                await this.bot?.editMessageText('❌ Unable to fetch current token data. Please try again.', {
-                    chat_id: chatId,
-                    message_id: messageId
-                });
-                return;
-            }
-
-            const tokenName = tokenMetadata?.name || tokenData.name;
-            const tokenSymbol = tokenMetadata?.symbol || tokenData.symbol;
-            const currentMarketCap = birdeyeData.market_cap;
-            const currentPriceUSD = birdeyeData.price * await this.getSolPrice();
+            const tokenName = metadata?.name || tokenData.name;
+            const tokenSymbol = metadata?.symbol || tokenData.symbol;
 
             const alertTypeMessage = `🚨 *Set Price Alert*
 
 Token: *${tokenName}* ($${tokenSymbol})
 Address: \`${tokenData.address.slice(0, 8)}...${tokenData.address.slice(-8)}\`
 
-Current Price: *$${this.formatPrice(currentPriceUSD)}*
-Current Market Cap: *${this.formatLargeNumber(currentMarketCap)}*
+Choose alert type:
 
-Choose alert type:`;
+*📊 Market Cap Alert* - Set a specific market cap target
+*📈 Market Cap Increase* - Alert when market cap increases by %
+*📉 Market Cap Decrease* - Alert when market cap decreases by %
+
+_Current price data will be fetched when you set your target for accuracy._`;
 
             const keyboard = {
                 inline_keyboard: [
@@ -1364,96 +1344,130 @@ Send your target market cap in the chat:`;
 
     // Handle price increase alert setup
     private async handlePriceIncreaseAlertSetup(chatId: string, messageId: number, tokenAddress: string, alertId: string): Promise<void> {
-        const presets = await this.getUserPresets(chatId, 'price_increase');
+        try {
+            // Fetch current market cap for display (informational only)
+            const marketData = await this.birdeyeService.getTokenMarketData(tokenAddress);
+            const presets = await this.getUserPresets(chatId, 'price_increase');
 
-        const message = `📈 *Market Cap Increase Alert*
+            let currentMarketCapText = '';
+            if (marketData) {
+                currentMarketCapText = `\nCurrent Market Cap: *${this.formatLargeNumber(marketData.market_cap)}*\n`;
+            }
 
-Select the percentage increase or type a custom percentage (e.g., "25%" or "150%"):`;
+            const message = `📈 *Market Cap Increase Alert*
+${currentMarketCapText}
+Select the percentage increase or type a custom percentage (e.g., "25%" or "150%"):
 
-        // Build dynamic keyboard based on user presets
-        const buttons: any[][] = [];
+_Note: Current market cap will be refreshed when you confirm your selection._`;
 
-        // Add preset buttons in rows of 3
-        for (let i = 0; i < presets.length; i += 3) {
-            const row = presets.slice(i, i + 3).map(percentage => ({
-                text: `${percentage}%`,
-                callback_data: `pi_${percentage}_${alertId}`
-            }));
-            buttons.push(row);
+            // Build dynamic keyboard based on user presets
+            const buttons: any[][] = [];
+
+            // Add preset buttons in rows of 3
+            for (let i = 0; i < presets.length; i += 3) {
+                const row = presets.slice(i, i + 3).map(percentage => ({
+                    text: `${percentage}%`,
+                    callback_data: `pi_${percentage}_${alertId}`
+                }));
+                buttons.push(row);
+            }
+
+            // Add Edit Presets, Back, and Cancel buttons
+            buttons.push([
+                { text: '⚙️ Edit Presets', callback_data: `edit_presets_increase_${alertId}` }
+            ]);
+            buttons.push([
+                { text: '⬅️ Back', callback_data: `back_${alertId}` },
+                { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
+            ]);
+
+            const keyboard = { inline_keyboard: buttons };
+
+            // Store pending alert for manual input
+            this.storePendingAlert(chatId, {
+                type: 'price_increase',
+                step: 'awaiting_percentage',
+                tokenAddress,
+                alertId
+            });
+
+            await this.bot?.editMessageText(message, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
+        } catch (error) {
+            console.error('Error setting up price increase alert:', error);
+            await this.bot?.editMessageText('❌ Error loading alert options. Please try again.', {
+                chat_id: chatId,
+                message_id: messageId
+            });
         }
-
-        // Add Edit Presets, Back, and Cancel buttons
-        buttons.push([
-            { text: '⚙️ Edit Presets', callback_data: `edit_presets_increase_${alertId}` }
-        ]);
-        buttons.push([
-            { text: '⬅️ Back', callback_data: `back_${alertId}` },
-            { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
-        ]);
-
-        const keyboard = { inline_keyboard: buttons };
-
-        // Store pending alert for manual input
-        this.storePendingAlert(chatId, {
-            type: 'price_increase',
-            step: 'awaiting_percentage',
-            tokenAddress,
-            alertId
-        });
-
-        await this.bot?.editMessageText(message, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-        });
     }
 
     // Handle price decrease alert setup
     private async handlePriceDecreaseAlertSetup(chatId: string, messageId: number, tokenAddress: string, alertId: string): Promise<void> {
-        const presets = await this.getUserPresets(chatId, 'price_decrease');
+        try {
+            // Fetch current market cap for display (informational only)
+            const marketData = await this.birdeyeService.getTokenMarketData(tokenAddress);
+            const presets = await this.getUserPresets(chatId, 'price_decrease');
 
-        const message = `📉 *Market Cap Decrease Alert*
+            let currentMarketCapText = '';
+            if (marketData) {
+                currentMarketCapText = `\nCurrent Market Cap: *${this.formatLargeNumber(marketData.market_cap)}*\n`;
+            }
 
-Select the percentage decrease or type a custom percentage (e.g., "25%" or "80%"):`;
+            const message = `📉 *Market Cap Decrease Alert*
+${currentMarketCapText}
+Select the percentage decrease or type a custom percentage (e.g., "25%" or "80%"):
 
-        // Build dynamic keyboard based on user presets
-        const buttons: any[][] = [];
+_Note: Current market cap will be refreshed when you confirm your selection._`;
 
-        // Add preset buttons in rows of 3
-        for (let i = 0; i < presets.length; i += 3) {
-            const row = presets.slice(i, i + 3).map(percentage => ({
-                text: `${percentage}%`,
-                callback_data: `pd_${percentage}_${alertId}`
-            }));
-            buttons.push(row);
+            // Build dynamic keyboard based on user presets
+            const buttons: any[][] = [];
+
+            // Add preset buttons in rows of 3
+            for (let i = 0; i < presets.length; i += 3) {
+                const row = presets.slice(i, i + 3).map(percentage => ({
+                    text: `${percentage}%`,
+                    callback_data: `pd_${percentage}_${alertId}`
+                }));
+                buttons.push(row);
+            }
+
+            // Add Edit Presets, Back, and Cancel buttons
+            buttons.push([
+                { text: '⚙️ Edit Presets', callback_data: `edit_presets_decrease_${alertId}` }
+            ]);
+            buttons.push([
+                { text: '⬅️ Back', callback_data: `back_${alertId}` },
+                { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
+            ]);
+
+            const keyboard = { inline_keyboard: buttons };
+
+            // Store pending alert for manual input
+            this.storePendingAlert(chatId, {
+                type: 'price_decrease',
+                step: 'awaiting_percentage',
+                tokenAddress,
+                alertId
+            });
+
+            await this.bot?.editMessageText(message, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
+        } catch (error) {
+            console.error('Error setting up price decrease alert:', error);
+            await this.bot?.editMessageText('❌ Error loading alert options. Please try again.', {
+                chat_id: chatId,
+                message_id: messageId
+            });
         }
-
-        // Add Edit Presets, Back, and Cancel buttons
-        buttons.push([
-            { text: '⚙️ Edit Presets', callback_data: `edit_presets_decrease_${alertId}` }
-        ]);
-        buttons.push([
-            { text: '⬅️ Back', callback_data: `back_${alertId}` },
-            { text: '❌ Cancel', callback_data: `cancel_${alertId}` }
-        ]);
-
-        const keyboard = { inline_keyboard: buttons };
-
-        // Store pending alert for manual input
-        this.storePendingAlert(chatId, {
-            type: 'price_decrease',
-            step: 'awaiting_percentage',
-            tokenAddress,
-            alertId
-        });
-
-        await this.bot?.editMessageText(message, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-        });
     }
 
     // Create market cap percentage alert

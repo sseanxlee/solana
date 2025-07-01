@@ -10,6 +10,7 @@ interface User {
     walletAddress: string;
     email?: string;
     telegramChatId?: string;
+    discordUserId?: string;
 }
 
 interface AuthContextType {
@@ -19,6 +20,7 @@ interface AuthContextType {
     isLoading: boolean;
     signIn: () => Promise<void>;
     signOut: () => void;
+    refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,7 +39,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     useEffect(() => {
         // Check for stored authentication on app load
-        const checkStoredAuth = () => {
+        const checkStoredAuth = async () => {
             const hasSignedOut = localStorage.getItem('has_signed_out');
             const storedToken = localStorage.getItem('auth_token');
             const storedUser = localStorage.getItem('auth_user');
@@ -49,6 +51,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     setToken(storedToken);
                     setUser(userData);
                     apiService.setAuthToken(storedToken);
+
+                    // Refresh user data to get any updates (like Discord linking)
+                    try {
+                        const response = await apiService.getCurrentUser();
+                        if (response.success && response.data) {
+                            setUser(response.data);
+                            localStorage.setItem('auth_user', JSON.stringify(response.data));
+                        }
+                    } catch (error) {
+                        console.error('Failed to refresh user data on startup:', error);
+                        // Don't fail the auth process if refresh fails
+                    }
                 } catch (error) {
                     console.error('❌ Error parsing stored user data:', error);
                     // Clear invalid stored data
@@ -146,6 +160,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     };
 
+    const refreshUser = async () => {
+        if (!token) return;
+
+        try {
+            const response = await apiService.getCurrentUser();
+            if (response.success && response.data) {
+                setUser(response.data);
+                localStorage.setItem('auth_user', JSON.stringify(response.data));
+            }
+        } catch (error) {
+            console.error('Failed to refresh user data:', error);
+        }
+    };
+
     const signOut = () => {
         setUser(null);
         setToken(null);
@@ -164,6 +192,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading,
         signIn,
         signOut,
+        refreshUser,
     };
 
     return (

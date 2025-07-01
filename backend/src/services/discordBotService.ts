@@ -5,6 +5,9 @@ import { SolPriceService } from './solPriceService';
 import { query } from '../config/database';
 import axios from 'axios';
 
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
 const DISCORD_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY || '';
@@ -150,6 +153,10 @@ export class DiscordBotService {
                         .setDescription('The Solana token address')
                         .setRequired(true)
                 ),
+
+            new SlashCommandBuilder()
+                .setName('link')
+                .setDescription('Link your Discord account to the web app for synced alerts'),
         ];
 
         try {
@@ -231,6 +238,9 @@ export class DiscordBotService {
                 case 'setalert':
                     await this.handleSetAlertCommand(interaction);
                     break;
+                case 'link':
+                    await this.handleLinkCommand(interaction);
+                    break;
                 default:
                     await interaction.reply('Unknown command!');
             }
@@ -270,7 +280,7 @@ export class DiscordBotService {
             .addFields(
                 {
                     name: '🔰 Basic Commands',
-                    value: '`/start` - Get started with the bot\n`/help` - Show this help message\n`/setalert <address>` - Set alert for a token'
+                    value: '`/start` - Get started with the bot\n`/help` - Show this help message\n`/link` - Link your Discord account\n`/setalert <address>` - Set alert for a token'
                 },
                 {
                     name: '📊 Alert Management',
@@ -288,6 +298,11 @@ export class DiscordBotService {
 
     private async handleAlertsCommand(interaction: any): Promise<void> {
         try {
+            await interaction.deferReply();
+
+            // Check if user is linked before showing alerts
+            if (!(await this.requireLinkedAccount(interaction))) return;
+
             const userId = interaction.user.id;
 
             // Get user's active alerts
@@ -644,7 +659,178 @@ export class DiscordBotService {
         }
 
         await interaction.deferReply();
+
+        // Check if user is linked before allowing alert creation
+        if (!(await this.requireLinkedAccount(interaction))) return;
+
         await this.handleTokenAddressMessage(interaction, tokenAddress, true);
+    }
+
+    // Function to check if user has linked account
+    private async requireLinkedAccount(interaction: any): Promise<boolean> {
+        const userId = interaction.user.id;
+
+        const user = await query(`
+            SELECT u.wallet_address 
+            FROM users u 
+            WHERE u.discord_user_id = $1 AND u.wallet_address IS NOT NULL
+            AND u.wallet_address != '' 
+            AND NOT u.wallet_address LIKE 'discord_%_placeholder'
+        `, [userId]);
+
+        if (user.rows.length === 0) {
+            const embed = new EmbedBuilder()
+                .setColor(0xFF6B6B)
+                .setTitle('🔗 Account Not Linked')
+                .setDescription('You need to link your Discord account first!')
+                .addFields({
+                    name: '👇 How to link:',
+                    value: 'Use the `/link` command to connect your Discord to your wallet.'
+                });
+
+            await interaction.editReply({ embeds: [embed] });
+            return false;
+        }
+
+        return true;
+    }
+
+    private async handleLinkCommand(interaction: any): Promise<void> {
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            const userId = interaction.user.id;
+            const username = interaction.user.username;
+
+            // Check if user already has a linked account
+            const userResult = await query(`
+                SELECT id, wallet_address FROM users WHERE discord_user_id = $1
+            `, [userId]);
+
+            if (userResult.rows.length > 0) {
+                const user = userResult.rows[0];
+
+                // Check if they have a real wallet (not a placeholder)
+                if (user.wallet_address &&
+                    user.wallet_address !== null &&
+                    user.wallet_address !== '' &&
+                    !user.wallet_address.startsWith('discord_')) {
+
+                    const embed = new EmbedBuilder()
+                        .setColor(0x00FF00)
+                        .setTitle('✅ Account Already Linked')
+                        .setDescription(`Your Discord account is already linked to wallet: \`${user.wallet_address.slice(0, 6)}...${user.wallet_address.slice(-6)}\``)
+                        .addFields({
+                            name: '🎯 What you can do now:',
+                            value: '• Use `/setalert` to create alerts\n• Use `/alerts` to view your alerts\n• Send token addresses for analysis'
+                        })
+                        .setTimestamp();
+
+                    await interaction.editReply({ embeds: [embed] });
+                    return;
+                }
+            }
+
+            // Generate linking token
+            try {
+                const response = await axios.post(`${API_BASE_URL}/api/auth/discord/generate-link-token`, {
+                    discordUserId: userId,
+                    discordUsername: username
+                });
+
+                if (!response.data.success) {
+                    if (response.data.data?.isAlreadyLinked) {
+                        await interaction.editReply({
+                            content: '✅ Your Discord account is already linked to a wallet!'
+                        });
+                        return;
+                    }
+                    throw new Error(response.data.error || 'Failed to generate linking token');
+                }
+
+                const token = response.data.data.token;
+                const linkingUrl = `${FRONTEND_URL}/link-discord?token=${token}`;
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x5865F2)
+                    .setTitle('🔗 Link Your Discord Account')
+                    .setDescription('Click the button below to securely link your Discord account to your wallet!')
+                    .addFields(
+                        {
+                            name: '🛡️ Secure Process',
+                            value: 'This creates a secure, time-limited link between your Discord and wallet accounts.'
+                        },
+                        {
+                            name: '⏰ Important',
+                            value: 'This link expires in **15 minutes** for security.'
+                        },
+                        {
+                            name: '🚀 After linking:',
+                            value: '• Alerts sync across Discord, Telegram, and web\n• Create alerts from any platform\n• Real-time Discord notifications'
+                        }
+                    )
+                    .setFooter({ text: 'Secure linking via stride.so' })
+                    .setTimestamp();
+
+                const linkButton = new ButtonBuilder()
+                    .setLabel('Link Account')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(linkingUrl)
+                    .setEmoji('🔗');
+
+                const row = new ActionRowBuilder<ButtonBuilder>().addComponents(linkButton);
+
+                await interaction.editReply({
+                    embeds: [embed],
+                    components: [row]
+                });
+
+                console.log(`[DISCORD LINK] Generated linking URL for user ${userId} (${username})`);
+
+            } catch (apiError) {
+                console.error('Error generating linking token:', apiError);
+
+                // Fallback to manual linking instructions
+                const embed = new EmbedBuilder()
+                    .setColor(0xFF6B6B)
+                    .setTitle('🔗 Manual Linking Required')
+                    .setDescription('Automatic linking is temporarily unavailable. Please link manually:')
+                    .addFields(
+                        {
+                            name: '🌐 Manual Steps:',
+                            value: '1. Visit our web app\n2. Connect your wallet\n3. Go to Integrations page\n4. Enter your Discord User ID'
+                        },
+                        {
+                            name: '🆔 Your Discord User ID:',
+                            value: `\`${userId}\``
+                        },
+                        {
+                            name: '🔗 Web App:',
+                            value: `${FRONTEND_URL}/integrations`
+                        }
+                    )
+                    .setFooter({ text: 'Copy your User ID from above' })
+                    .setTimestamp();
+
+                const webButton = new ButtonBuilder()
+                    .setLabel('Open Web App')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(`${FRONTEND_URL}/integrations`)
+                    .setEmoji('🌐');
+
+                const row = new ActionRowBuilder<ButtonBuilder>().addComponents(webButton);
+
+                await interaction.editReply({
+                    embeds: [embed],
+                    components: [row]
+                });
+            }
+
+        } catch (error) {
+            console.error('Error in link command:', error);
+            await interaction.editReply({
+                content: '❌ Error processing link command. Please try again later.'
+            });
+        }
     }
 
     private async handleMessage(message: Message): Promise<void> {
@@ -1476,11 +1662,27 @@ Type "cancel" anytime to stop.`)
 
         } catch (error) {
             console.error('Error creating percentage alert:', error);
-            await interaction.editReply({
-                content: '❌ Error creating alert. Please try again.',
-                embeds: [],
-                components: []
-            });
+
+            if (error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
+                const embed = new EmbedBuilder()
+                    .setColor(0x5865F2)
+                    .setTitle('🔗 Account Linking Required')
+                    .setDescription('To create alerts, you need to link your Discord account to a wallet.')
+                    .addFields(
+                        { name: '🎯 Quick Start', value: 'Use the `/link` command to get your Discord User ID and linking instructions!' },
+                        { name: '🌐 Link Your Account', value: '1. Visit our website and connect your wallet\n2. Go to Settings → Discord Integration\n3. Enter your Discord User ID\n4. Click "Link Account"' },
+                        { name: '🎉 After Linking', value: 'Create alerts that sync across Discord, web app, and Telegram!' }
+                    )
+                    .setFooter({ text: 'Use /link for step-by-step instructions!' });
+
+                await interaction.editReply({ embeds: [embed], components: [] });
+            } else {
+                await interaction.editReply({
+                    content: '❌ Error creating alert. Please try again.',
+                    embeds: [],
+                    components: []
+                });
+            }
         }
     }
 
@@ -1577,16 +1779,17 @@ Type "cancel" anytime to stop.`)
         } catch (error) {
             console.error('Error creating market cap alert:', error);
 
-            if (error.message && error.message.includes('link your Discord account')) {
+            if (error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
                 const embed = new EmbedBuilder()
-                    .setColor(0xFF6B6B)
+                    .setColor(0x5865F2)
                     .setTitle('🔗 Account Linking Required')
                     .setDescription('To create alerts, you need to link your Discord account to a wallet.')
                     .addFields(
-                        { name: '🌐 Link Your Account', value: 'Visit our website to connect your wallet and link Discord:\n**[Sign Up on Stride](https://your-stride-website.com)**' },
-                        { name: '🔄 How It Works', value: '1. Connect your wallet on our website\n2. Link your Discord account\n3. Come back and create alerts!' }
+                        { name: '🎯 Quick Start', value: 'Use the `/link` command to get your Discord User ID and linking instructions!' },
+                        { name: '🌐 Link Your Account', value: '1. Visit our website and connect your wallet\n2. Go to Settings → Discord Integration\n3. Enter your Discord User ID\n4. Click "Link Account"' },
+                        { name: '🎉 After Linking', value: 'Create alerts that sync across Discord, web app, and Telegram!' }
                     )
-                    .setFooter({ text: 'Your alerts will sync across Discord, Telegram, and web!' });
+                    .setFooter({ text: 'Use /link for step-by-step instructions!' });
 
                 await interaction.editReply({ embeds: [embed] });
             } else {
@@ -1679,8 +1882,8 @@ Type "cancel" anytime to stop.`)
             await this.startMonitoringIfNeeded(tokenAddress);
         } catch (error) {
             if (error.message === 'DISCORD_USER_NOT_LINKED') {
-                // User needs to link their account - throw a more descriptive error
-                throw new Error('Please link your Discord account on our website first: https://your-stride-website.com');
+                // User needs to link their account - provide helpful Discord-native guidance
+                throw new Error('DISCORD_ACCOUNT_LINKING_REQUIRED');
             }
             console.error('Error creating Discord alert in database:', error);
             throw error;

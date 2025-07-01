@@ -25,7 +25,7 @@ interface TokenAlert {
     threshold_type: 'price' | 'market_cap';
     threshold_value: number;
     condition: 'above' | 'below';
-    notification_type: 'email' | 'telegram';
+    notification_type: 'email' | 'telegram' | 'discord';
     is_active: boolean;
     is_triggered: boolean;
     triggered_at?: string;
@@ -38,7 +38,7 @@ interface CreateAlertRequest {
     thresholdType: 'price' | 'market_cap';
     thresholdValue: number;
     condition: 'above' | 'below';
-    notificationType: 'email' | 'telegram';
+    notificationType: 'email' | 'telegram' | 'discord';
 }
 
 interface UpdateAlertRequest {
@@ -60,6 +60,7 @@ interface AuthResponse {
         walletAddress: string;
         email?: string;
         telegramChatId?: string;
+        discordUserId?: string;
     };
 }
 
@@ -397,6 +398,10 @@ class ApiService {
         return this.request<AuthResponse>('POST', '/auth/signin', data);
     }
 
+    async getCurrentUser(): Promise<ApiResponse<AuthResponse['user']>> {
+        return this.request<AuthResponse['user']>('GET', '/auth/me');
+    }
+
     // Alert endpoints
     async getAlerts(): Promise<ApiResponse<TokenAlert[]>> {
         return this.request<TokenAlert[]>('GET', '/alerts');
@@ -514,6 +519,30 @@ class ApiService {
         telegramChatId?: string;
     }): Promise<ApiResponse> {
         return this.request('PUT', '/profile', data);
+    }
+
+    // Discord linking
+    async linkDiscord(discordUserId: string): Promise<ApiResponse> {
+        return this.request('POST', '/auth/link-discord', { discordUserId });
+    }
+
+    async getDiscordLinkingStatus(): Promise<ApiResponse<{ isLinked: boolean; discordUserId?: string }>> {
+        return this.request('GET', '/auth/discord-status');
+    }
+
+    async getDiscordTokenInfo(token: string): Promise<ApiResponse<{
+        discordUsername: string;
+        discordUserId: string;
+        isExpired: boolean;
+        isUsed: boolean;
+    }>> {
+        return this.request('GET', `/auth/discord/token-info/${token}`);
+    }
+
+    async linkDiscordWithToken(linkingToken: string): Promise<ApiResponse<{
+        discordUsername: string;
+    }>> {
+        return this.request('POST', '/auth/discord/link-with-token', { linkingToken });
     }
 
     // Admin endpoints

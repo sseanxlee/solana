@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { apiService } from '../../services/api';
 import { presetSettingsService, PresetSettings } from '../../services/presetSettings';
 import DashboardLayout from '../../components/DashboardLayout';
+
 import toast from 'react-hot-toast';
 
 export default function SettingsPage() {
@@ -283,6 +284,8 @@ export default function SettingsPage() {
                     )}
                 </div>
 
+
+
                 {/* Notification Preferences */}
                 <div className="card-elevated">
                     <h2 className="text-xl font-semibold text-gray-100 mb-4">Notification Preferences</h2>
@@ -311,6 +314,19 @@ export default function SettingsPage() {
                                 : 'bg-gray-100 text-gray-800'
                                 }`}>
                                 {user?.telegramChatId ? 'Connected' : 'Not connected'}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
+                            <div>
+                                <h3 className="text-gray-200 font-medium">Discord Notifications</h3>
+                                <p className="text-gray-400 text-sm">Receive alert notifications via Discord bot</p>
+                            </div>
+                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${user?.discordUserId
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                {user?.discordUserId ? 'Connected' : 'Not connected'}
                             </div>
                         </div>
                     </div>

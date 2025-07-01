@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS user_presets (
   UNIQUE(user_id, preset_type)
 );
 
+-- Create discord_linking_tokens table for seamless Discord account linking
+CREATE TABLE IF NOT EXISTS discord_linking_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token VARCHAR(64) UNIQUE NOT NULL,
+  discord_user_id VARCHAR(255) NOT NULL,
+  discord_username VARCHAR(255),
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  wallet_address VARCHAR(44),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_wallet_address ON users(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_token_alerts_user_id ON token_alerts(user_id);
@@ -71,6 +83,9 @@ CREATE INDEX IF NOT EXISTS idx_token_alerts_token_address ON token_alerts(token_
 CREATE INDEX IF NOT EXISTS idx_token_alerts_active ON token_alerts(is_active) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_notification_queue_status ON notification_queue(status) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_user_presets_user_id ON user_presets(user_id);
+CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_token ON discord_linking_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_expires ON discord_linking_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_discord_user_id ON discord_linking_tokens(discord_user_id);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

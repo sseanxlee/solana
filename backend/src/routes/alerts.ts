@@ -112,10 +112,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         }
 
         // Validate notification type
-        if (!['email', 'telegram'].includes(notificationType)) {
+        if (!['email', 'telegram', 'discord'].includes(notificationType)) {
             return res.status(400).json({
                 success: false,
-                error: 'Notification type must be either "email" or "telegram"'
+                error: 'Notification type must be either "email", "telegram", or "discord"'
             } as ApiResponse);
         }
 
@@ -128,20 +128,24 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             } as ApiResponse);
         }
 
-        // Check if user has required notification method configured
-        if (notificationType === 'email' && !req.user!.email) {
-            return res.status(400).json({
-                success: false,
-                error: 'Email not configured. Please update your profile first.'
-            } as ApiResponse);
-        }
-
+        // Check if user has required notification method configured (only for telegram now)
         if (notificationType === 'telegram' && !req.user!.telegram_chat_id) {
             return res.status(400).json({
                 success: false,
                 error: 'Telegram not configured. Please update your profile first.'
             } as ApiResponse);
         }
+
+        // Remove email requirement for now
+        // if (notificationType === 'email' && !req.user!.email) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         error: 'Email not configured. Please update your profile first.'
+        //     } as ApiResponse);
+        // }
+
+        // Discord alerts are handled differently - no direct user config required
+        // Discord users are linked through the Discord bot service
 
         // Get token metadata
         const tokenData = await tokenService.getTokenData(tokenAddress);
