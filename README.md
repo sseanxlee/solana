@@ -1,338 +1,224 @@
-# Solana Token Alerts
+# Stride - Solana Token Alert System
 
-A comprehensive token alert system for Solana blockchain tokens with real-time price monitoring and multi-channel notifications.
+A token alert platform for Solana that monitors price movements and sends notifications across Discord, Telegram, email, and browser extension.
 
-## Overview
+## What it does
 
-This full-stack application enables users to create and manage price alerts for Solana tokens, including newly launched tokens from Pump.fun. The system provides real-time monitoring with automated notifications via email and Telegram when price or market cap thresholds are reached.
+Set price alerts for any Solana token. Get notified when thresholds are hit via:
+- Discord bot with slash commands
+- Telegram bot
+- Email notifications
+- Chrome extension overlay
 
-## Key Features
+Connect your Phantom wallet to manage alerts through the web dashboard or create alerts directly from token pages using the browser extension.
 
-- **Phantom Wallet Authentication**: Secure sign-in using Solana wallet signatures with SIWS (Sign-In With Solana)
-- **Real-time Token Monitoring**: Automated price checking every 60 seconds with intelligent alert triggering
-- **Dual Notification System**: Email notifications via SendGrid and Telegram bot integration
-- **Alert Management**: Create, update, and delete price/market cap alerts with customizable thresholds
-- **Auto-cleanup**: Alerts automatically disable after triggering to prevent spam
+## Tech Stack
 
-## Technology Stack
+**Frontend**: Next.js 14, TypeScript, Tailwind CSS, Phantom wallet integration  
+**Backend**: Node.js/Express, TypeScript, PostgreSQL, Redis  
+**Bots**: Discord.js, Telegram Bot API  
+**Extension**: Chrome Extension API  
+**APIs**: Moralis, Jupiter, Birdeye, Solana streaming  
+**Notifications**: SendGrid, WebSockets  
 
-**Frontend**: Next.js 14, TypeScript, Tailwind CSS, Phantom Wallet Integration  
-**Backend**: Node.js, Express, TypeScript, JWT Authentication  
-**Database**: PostgreSQL with optimized indexes  
-**Cache/Queue**: Redis for notification processing  
-**External APIs**: Moralis API (primary), Jupiter API (fallback), SendGrid, Telegram Bot API  
-**Security**: Rate limiting, input validation, SQL injection protection
-
-## Architecture
+## Project Structure
 
 ```
-Frontend (Next.js)     Backend (Express)     External APIs
-     │                      │                     │
-     ├─ Phantom Wallet ─────┼─ Auth Service ─────┤
-     ├─ Dashboard ──────────┼─ Alert Service ────┼─ Moralis API
-     ├─ Alert Management ───┼─ Token Service ────┼─ Jupiter API  
-     └─ Profile Settings ───┼─ Notification ─────┼─ SendGrid
-                             │   Service          │─ Telegram Bot
-                             │                    │
-                             ├─ PostgreSQL ───────┤
-                             ├─ Redis Queue ──────┤
-                             └─ Monitoring ───────┘
+
 ```
 
-## Database Schema
+## Quick Start
 
-The application uses PostgreSQL with two primary tables:
-
-**Users**: Stores wallet addresses, email, and Telegram chat IDs for notification routing  
-**Token Alerts**: Manages alert configurations including token addresses, threshold values, conditions, and trigger states
-
-## API Endpoints
-
-- Authentication: Nonce generation and wallet signature verification
-- Alert Management: CRUD operations for user alerts with validation
-- Token Data: Real-time price and market cap retrieval
-- Admin: System monitoring and manual alert testing
-
-## Security Features
-
-- Cryptographic wallet signature verification
-- JWT-based session management with secure token handling
-- Comprehensive rate limiting and input validation
-- Parameterized database queries preventing SQL injection
-- CORS configuration for cross-origin request protection
-
-## Premium Features
-
-### Moralis API Integration
-
-This application includes ready-to-use integration with the Moralis Deep Index API for enhanced token search capabilities. The premium search provides:
-
-- **Enhanced Token Discovery**: Search by contract address, token name, or symbol
-- **Rich Metadata**: Includes logos, security scores, and verification status
-- **Advanced Filtering**: Filter by verified contracts, sort by volume/liquidity/market cap
-- **Real-time Data**: Fresh token data with comprehensive market metrics
-- **Solana Network Support**: Optimized for Solana blockchain tokens
-
-#### Enabling Premium Search
-
-To enable the Moralis API integration:
-
-1. **Get Moralis API Key**: Visit [Moralis.io](https://moralis.io) and upgrade to a premium plan
-2. **Configure Environment Variables**:
+1. **Run setup script**:
    ```bash
-   NEXT_PUBLIC_USE_MORALIS_SEARCH=true
-   NEXT_PUBLIC_MORALIS_API_KEY=your-premium-moralis-api-key
-   ```
-3. **Restart the Application**: The search functionality will automatically switch to use Moralis API
-
-#### API Comparison
-
-| Feature | Legacy API | Moralis Premium API |
-|---------|------------|-------------------|
-| Search Method | Contract address only | Address, name, symbol |
-| Token Logos | ❌ | ✅ |
-| Security Scores | ❌ | ✅ |
-| Verification Status | ❌ | ✅ |
-| Market Data | Basic | Comprehensive |
-| Sorting Options | None | Volume, Liquidity, Market Cap |
-| Rate Limits | Standard | Enhanced |
-
-## Setup Instructions
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd TP3
+   chmod +x setup.sh
+   ./setup.sh
    ```
 
-2. **Install dependencies**
+2. **Configure environment**:
    ```bash
-   npm install
+   # Edit .env with your API keys and database connection
+   cp env.example .env
    ```
 
-3. **Configure environment variables**
+3. **Set up PostgreSQL database**:
    ```bash
-   cp env.example .env.local
-   # Edit .env.local with your configuration
-   ```
-
-4. **Set up the database**
-   ```bash
-   # Start MongoDB
-   mongod
-   
-   # Run database migration
+   # Create database and run migrations
    cd backend
    npm run migrate
    ```
 
-5. **Start the development servers**
+4. **Start development servers**:
    ```bash
    # Terminal 1 - Backend
    cd backend
    npm run dev
    
-   # Terminal 2 - Frontend
+   # Terminal 2 - Frontend  
    cd frontend
    npm run dev
    ```
 
-6. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
+5. **Load Chrome extension**:
+   - Open `chrome://extensions/`
+   - Enable Developer mode
+   - Load unpacked extension from `chrome-extension/` folder
 
-## Configuration
+## Features
 
-### Environment Variables
+### Web Dashboard
+- Connect Phantom wallet
+- Search and add tokens
+- Create price/market cap alerts
+- View alert history
+- Link Discord/Telegram accounts
 
-#### Required
-- `MONGODB_URI`: MongoDB connection string
-- `JWT_SECRET`: Secret key for JWT token generation
-- `NEXT_PUBLIC_API_URL`: Backend API URL for frontend
+### Discord Bot
+- `/alert create` - Create new alerts
+- `/alert list` - View your alerts
+- `/alert delete` - Remove alerts
+- `/link` - Connect Discord to wallet
+- Real-time price notifications
 
-#### Optional
-- `NEXT_PUBLIC_USE_MORALIS_SEARCH`: Enable premium Moralis search (default: false)
-- `NEXT_PUBLIC_MORALIS_API_KEY`: Your Moralis API key for premium features
-- Email configuration for notifications (SMTP settings)
-- Telegram bot configuration for alerts
+### Telegram Bot
+- Similar commands as Discord
+- Private message notifications
+- Account linking
 
-### Database Setup
+### Chrome Extension
+- Overlay on token pages (pump.fun, dexscreener, etc.)
+- One-click alert creation
+- Sync with main platform
 
-The application uses MongoDB for data storage. Run the migration script to set up the required collections and indexes:
+## Database Schema
 
-```bash
-cd backend
-npm run migrate
-```
-
-## Usage
-
-1. **Connect Wallet**: Use Phantom wallet to authenticate
-2. **Search Tokens**: Enter token contract addresses to find tokens
-3. **Create Alerts**: Set price thresholds for notifications
-4. **Monitor Dashboard**: View alerts and token performance
-5. **Manage Settings**: Configure notification preferences
+**PostgreSQL tables**:
+- `users` - Wallet addresses and notification preferences
+- `token_alerts` - Alert configurations and states
+- `notification_queue` - Pending notifications
+- `user_presets` - Custom percentage presets
+- `discord_linking_tokens` - Discord account linking
+- `extension_linking_tokens` - Extension connection tokens
 
 ## API Endpoints
 
 ### Authentication
-- `GET /api/auth/nonce` - Get authentication nonce
-- `POST /api/auth/signin` - Sign in with wallet signature
+- `GET /api/auth/nonce` - Get wallet nonce
+- `POST /api/auth/signin` - Sign in with wallet
 
 ### Alerts
 - `GET /api/alerts` - Get user alerts
-- `POST /api/alerts` - Create new alert
+- `POST /api/alerts` - Create alert
 - `PUT /api/alerts/:id` - Update alert
 - `DELETE /api/alerts/:id` - Delete alert
 
 ### Tokens
-- `GET /api/tokens/search` - Search tokens (switches between legacy and Moralis based on config)
-- `GET /api/tokens/:address` - Get token details
-- `GET /api/tokens/:address/pairs` - Get token trading pairs
+- `GET /api/tokens/search` - Search tokens
+- `GET /api/tokens/:address` - Get token data
+
+### Integrations
+- `POST /api/discord/link` - Link Discord account
+- `POST /api/telegram/link` - Link Telegram account
+- `POST /api/extension/link` - Link browser extension
+
+## Environment Variables
+
+Required:
+```bash
+DATABASE_URL=postgresql://user:pass@localhost:5432/db
+REDIS_URL=redis://localhost:6379
+JWT_SECRET=your-secret-key
+MORALIS_API_KEY=your-moralis-key
+SENDGRID_API_KEY=your-sendgrid-key
+TELEGRAM_BOT_TOKEN=your-telegram-token
+DISCORD_BOT_TOKEN=your-discord-token
+DISCORD_CLIENT_ID=your-discord-client-id
+```
+
+Optional:
+```bash
+BIRDEYE_API_KEY=enhanced-data-source
+SOLANA_STREAMING_API_KEY=real-time-updates
+NEXT_PUBLIC_USE_MORALIS_SEARCH=true
+```
+
+## Services
+
+The backend runs several services:
+
+- **Monitoring Service**: Checks prices every 60 seconds
+- **Notification Service**: Processes alert notifications
+- **Discord Bot Service**: Handles Discord commands and notifications
+- **Telegram Bot Service**: Manages Telegram interactions
+- **Solana Streaming Service**: Real-time price updates
+- **Token Service**: Caches and fetches token data
+
+## Bot Setup
+
+### Discord Bot
+1. Create application at https://discord.com/developers/applications
+2. Add bot to server with permissions: `Send Messages`, `Use Slash Commands`
+3. Set `DISCORD_BOT_TOKEN` and `DISCORD_CLIENT_ID` in .env
+
+### Telegram Bot
+1. Message @BotFather on Telegram
+2. Create new bot with `/newbot`
+3. Set `TELEGRAM_BOT_TOKEN` in .env
+
+## Chrome Extension
+
+The extension adds alert functionality to token pages:
+
+- **Supported sites**: pump.fun, dexscreener, solscan, axiom.trade
+- **Features**: Price overlay, one-click alerts, account sync
+- **Installation**: Load unpacked in Chrome developer mode
+
+## Production Deployment
+
+Using PM2 for process management:
+
+```bash
+# Build project
+npm run build
+
+# Start with PM2
+cd backend
+npm run start:production
+
+# Monitor
+npm run monitor
+```
 
 ## Development
 
-### Project Structure
-```
-TP3/
-├── frontend/          # Next.js frontend application
-├── backend/           # Express.js backend API
-├── env.example        # Environment configuration template
-└── README.md         # This file
+### Backend Development
+```bash
+cd backend
+npm run dev              # Start API server
+npm run dev:websocket    # Start WebSocket service
 ```
 
-### Frontend Structure
-```
-frontend/src/
-├── app/              # Next.js app router pages
-├── components/       # React components
-├── contexts/         # React contexts (Auth, Wallet)
-└── services/         # API service layer
+### Frontend Development
+```bash
+cd frontend
+npm run dev             # Start Next.js dev server
+npm run build           # Build for production
 ```
 
-### Backend Structure
-```
-backend/src/
-├── routes/           # API route handlers
-├── middleware/       # Express middleware
-├── services/         # Business logic services
-└── types/           # TypeScript type definitions
+### Database Migrations
+```bash
+cd backend
+npm run migrate         # Run SQL migrations
 ```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork the repo
+2. Create feature branch
+3. Make changes
+4. Test thoroughly
+5. Submit PR
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Support
-
-For support and questions:
-- Create an issue in the GitHub repository
-- Check the documentation for configuration details
-- Review the environment variable setup for premium features
-
-## Roadmap
-
-- [ ] Advanced portfolio analytics
-- [ ] Multi-wallet support
-- [ ] Mobile application
-- [ ] Advanced charting and technical indicators
-- [ ] Social trading features
-- [ ] DeFi protocol integrations
-
----
-
-**Note**: The Moralis API integration is ready for immediate use once you upgrade your API key. Simply toggle the environment variable to enable premium search features.
-
-# Hello World Chrome Extension
-
-A simple Chrome extension that displays "Hello World" with interactive features.
-
-## Files Structure
-```
-chrome-extension/
-├── manifest.json       # Extension configuration
-├── popup.html          # Main popup interface
-├── popup.css           # Styling for the popup
-├── popup.js            # JavaScript functionality
-├── README.md           # This file
-└── icons/              # Extension icons (you need to add these)
-    ├── icon16.png
-    ├── icon32.png
-    ├── icon48.png
-    └── icon128.png
-```
-
-## Features
-- ✨ Beautiful gradient design
-- 🎯 Interactive button with click counter
-- 🎉 Random congratulatory messages
-- ⌨️ Keyboard support (Enter key)
-- 🎨 Smooth animations and hover effects
-
-## Setup Instructions
-
-### 1. Add Extension Icons (Required)
-Create or download 4 icon files and save them in this directory:
-- `icon16.png` (16x16 pixels)
-- `icon32.png` (32x32 pixels) 
-- `icon48.png` (48x48 pixels)
-- `icon128.png` (128x128 pixels)
-
-You can:
-- Create simple colored squares in any image editor
-- Download free icons from sites like Icons8 or Flaticon
-- Use online tools like Canva to create simple icons
-
-### 2. Load Extension in Chrome (Developer Mode)
-
-1. **Open Chrome Extensions Page:**
-   - Type `chrome://extensions/` in your address bar, OR
-   - Click the three dots menu → More Tools → Extensions
-
-2. **Enable Developer Mode:**
-   - Toggle the "Developer mode" switch in the top-right corner
-
-3. **Load Your Extension:**
-   - Click "Load unpacked"
-   - Select this `chrome-extension` folder
-   - Your extension should appear in the list!
-
-4. **Pin the Extension (Optional):**
-   - Click the puzzle piece icon in Chrome's toolbar
-   - Find your "Hello World Extension"
-   - Click the pin icon to pin it to the toolbar
-
-### 3. Test Your Extension
-- Click the extension icon in your toolbar
-- You should see the "Hello World!" popup
-- Try clicking the button to see interactive messages!
-
-## Troubleshooting
-
-**Extension doesn't load:**
-- Make sure all 4 icon files exist
-- Check that manifest.json has no syntax errors
-- Refresh the extensions page and try again
-
-**Icons missing:**
-- Create placeholder icon files (even simple colored squares work)
-- Make sure file names match exactly: icon16.png, icon32.png, etc.
-
-**Popup doesn't show:**
-- Check browser console for JavaScript errors
-- Ensure popup.html, popup.css, and popup.js are in the same folder
-
-## Development Tips
-- Use Chrome DevTools to debug: Right-click popup → Inspect
-- After making changes, click the refresh button on the extensions page
-- Check the Console tab for any JavaScript errors
-
-Enjoy your first Chrome extension! 🎉
+MIT License - see LICENSE file for details.
