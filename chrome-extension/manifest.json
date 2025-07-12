@@ -1,17 +1,30 @@
 {
   "manifest_version": 3,
-  "name": "Stride Extension",
+  "name": "Stride - Token Alert Extension",
   "version": "1.0",
-  "description": "Set market alerts for solana tokens",
+  "description": "Create price alerts directly from token pages and sync across all platforms",
   "permissions": [
-    "activeTab",
+    "storage",
+    "tabs",
     "scripting",
-    "storage"
+    "activeTab"
   ],
+  "host_permissions": [
+    "https://axiom.trade/*",
+    "https://pump.fun/*",
+    "https://dexscreener.com/*",
+    "https://solscan.io/*",
+    "http://localhost:3000/*",
+    "http://localhost:3001/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://axiom.trade/*"
+        "<all_urls>"
       ],
       "js": [
         "content.js"
@@ -19,7 +32,16 @@
       "css": [
         "overlay.css"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/link-extension*"
+      ],
+      "js": [
+        "linking-content.js"
+      ],
+      "run_at": "document_end"
     }
   ],
   "action": {
@@ -37,5 +59,17 @@
     "32": "icon32.png",
     "48": "icon48.png",
     "128": "icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "overlay.css",
+        "popup.css",
+        "Fonts/*.otf"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }

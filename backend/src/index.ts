@@ -40,7 +40,9 @@ app.use(cors({
         'http://localhost:3002',
         'http://localhost:3003',
         'http://localhost:3004', // Allow frontend on port 3004
-        'http://localhost:3005'
+        'http://localhost:3005',
+        'https://axiom.trade', // Allow Chrome extension from axiom.trade
+        'https://www.axiom.trade' // Allow Chrome extension from www.axiom.trade
     ],
     credentials: true
 }));

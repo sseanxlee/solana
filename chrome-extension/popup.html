@@ -12,9 +12,126 @@
 </head>
 
 <body>
-    <div class="container">
-        <h1>Stride</h1>
-        <button id="overlayBtn">Open Overlay</button>
+    <div class="popup-container">
+        <!-- Connection Status Indicator -->
+        <div id="connectionStatus" class="connection-status disconnected">
+            <div class="connection-status-dot"></div>
+            <div>
+                <div id="connectionText">Disconnected</div>
+                <div id="walletAddress" class="wallet-address hidden"></div>
+            </div>
+        </div>
+
+        <!-- Main Header -->
+        <div class="header">
+            <div class="logo">Stride</div>
+            <div class="subtitle">Token Alert Extension</div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingContainer" class="loading-container">
+            <div class="spinner"></div>
+            <div style="font-size: 12px; color: #94a3b8;">Checking connection...</div>
+        </div>
+
+        <!-- Not Connected State -->
+        <div id="notConnectedContainer" class="hidden">
+            <div class="status-message info">
+                <strong>Connect Your Wallet</strong><br>
+                Link your wallet to sync alerts and access all features across platforms.
+            </div>
+
+            <button id="connectBtn" class="btn">
+                Connect to Stride
+            </button>
+
+            <div class="features">
+                <div class="feature-item">
+                    <span class="feature-icon">✓</span>
+                    Create alerts from any token page
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">✓</span>
+                    Sync across all your devices
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">✓</span>
+                    Real-time price overlays
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">✓</span>
+                    Multi-platform notifications
+                </div>
+            </div>
+        </div>
+
+        <!-- Connected State -->
+        <div id="connectedContainer" class="hidden">
+            <button id="openPanelBtn" class="btn btn-panel">
+                Open Panel
+            </button>
+
+            <!-- Market Cap Alert Panel - Only show when connected -->
+            <div class="alert-panel-section" id="alertPanelSection">
+                <div class="section-title">Quick Alerts</div>
+
+                <div class="popup-alert-panel" id="popupAlertPanel">
+                    <div class="alert-type-section">
+                        <div class="alert-type-tabs">
+                            <button class="alert-tab active" data-type="market_cap">Target</button>
+                            <button class="alert-tab" data-type="increase">+%</button>
+                            <button class="alert-tab" data-type="decrease">-%</button>
+                        </div>
+                    </div>
+                    <div class="presets-section" id="popupPresetsSection">
+                        <div class="preset-buttons" id="popupPresetButtons">
+                            <!-- Preset buttons will be dynamically generated -->
+                        </div>
+                        <div class="custom-section">
+                            <div class="custom-toggle">
+                                <button class="custom-toggle-btn" id="popupCustomToggle">+ Custom Value</button>
+                            </div>
+                            <div class="custom-input hidden" id="popupCustomInput">
+                                <input type="text" placeholder="e.g., 50M, 2.5B" id="popupCustomValueInput">
+                                <button class="set-btn" id="popupSetCustomBtn">Set</button>
+                            </div>
+                        </div>
+                        <div class="selection-display hidden" id="popupSelectionDisplay">
+                            <div class="selection-text" id="popupSelectionText"></div>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="create-alert-btn disabled" id="popupCreateAlertBtn">Create Alert</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="disconnect-section">
+                <button id="disconnectBtn" class="disconnect-button">
+                    Disconnect Extension
+                </button>
+            </div>
+        </div>
+
+        <!-- Just Connected Success Message (temporary) -->
+        <div id="successMessage" class="success-toast hidden">
+            <div class="success-content">
+                <span class="success-icon">✅</span>
+                <span>Extension connected successfully!</span>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorContainer" class="hidden">
+            <div class="status-message error">
+                <strong>Connection Error</strong><br>
+                <span id="errorMessage">Unable to connect to Stride. Please try again.</span>
+            </div>
+
+            <button id="retryBtn" class="btn">
+                Retry Connection
+            </button>
+        </div>
     </div>
     <script src="popup.js"></script>
 </body>

@@ -11,6 +11,7 @@ interface User {
     email?: string;
     telegramChatId?: string;
     discordUserId?: string;
+    extensionLinked?: boolean;
 }
 
 interface AuthContextType {

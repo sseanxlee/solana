@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS token_alerts (
   threshold_type VARCHAR(20) NOT NULL CHECK (threshold_type IN ('price', 'market_cap')),
   threshold_value DECIMAL(20, 8) NOT NULL,
   condition VARCHAR(10) NOT NULL CHECK (condition IN ('above', 'below')),
-  notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram', 'discord')),
+  notification_type VARCHAR(20) NOT NULL CHECK (notification_type IN ('email', 'telegram', 'discord', 'extension')),
   circulating_supply DECIMAL(30, 8),
   current_market_cap DECIMAL(30, 2),
   is_active BOOLEAN DEFAULT TRUE,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS token_data (
 CREATE TABLE IF NOT EXISTS notification_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   alert_id UUID REFERENCES token_alerts(id) ON DELETE CASCADE,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram', 'discord')),
+  type VARCHAR(20) NOT NULL CHECK (type IN ('email', 'telegram', 'discord', 'extension')),
   recipient VARCHAR(255) NOT NULL,
   subject VARCHAR(255),
   message TEXT NOT NULL,
@@ -77,6 +77,29 @@ CREATE TABLE IF NOT EXISTS discord_linking_tokens (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create extension_linking_tokens table for Chrome extension linking
+CREATE TABLE IF NOT EXISTS extension_linking_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token VARCHAR(64) UNIQUE NOT NULL,
+  connection_id VARCHAR(100) NOT NULL,
+  extension_id VARCHAR(100),
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  wallet_address VARCHAR(44),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create user_extensions table to track linked Chrome extensions
+CREATE TABLE IF NOT EXISTS user_extensions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  connection_id VARCHAR(100) NOT NULL,
+  extension_token VARCHAR(512) NOT NULL,
+  linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_wallet_address ON users(wallet_address);
 CREATE INDEX IF NOT EXISTS idx_token_alerts_user_id ON token_alerts(user_id);
@@ -87,6 +110,12 @@ CREATE INDEX IF NOT EXISTS idx_user_presets_user_id ON user_presets(user_id);
 CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_token ON discord_linking_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_expires ON discord_linking_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_discord_linking_tokens_discord_user_id ON discord_linking_tokens(discord_user_id);
+CREATE INDEX IF NOT EXISTS idx_extension_linking_tokens_token ON extension_linking_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_extension_linking_tokens_expires ON extension_linking_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_extension_linking_tokens_connection_id ON extension_linking_tokens(connection_id);
+CREATE INDEX IF NOT EXISTS idx_user_extensions_user_id ON user_extensions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_extensions_connection_id ON user_extensions(connection_id);
+CREATE INDEX IF NOT EXISTS idx_user_extensions_extension_token ON user_extensions(extension_token);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()

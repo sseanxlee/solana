@@ -614,6 +614,15 @@ Choose alert type:`;
                     statusMessage += `Active Alerts: ${tokenData.alerts.length}\n\n`;
 
                     for (const alert of tokenData.alerts) {
+                        // Debug logging for threshold value
+                        console.log(`[TELEGRAM ALERT STATUS] Alert threshold debug:`, {
+                            threshold_type: alert.threshold_type,
+                            threshold_value: alert.threshold_value,
+                            threshold_value_type: typeof alert.threshold_value,
+                            condition: alert.condition,
+                            token_symbol: alert.token_symbol
+                        });
+
                         if (alert.threshold_type === 'market_cap') {
                             statusMessage += `• Market Cap ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
                         } else if (alert.threshold_type === 'price_percentage') {
@@ -1000,29 +1009,79 @@ FDV: *${fdv}*
         `.trim();
     }
 
-    private formatPrice(price: number): string {
-        if (!price || typeof price !== 'number' || isNaN(price)) {
+    private formatPrice(price: number | string | null | undefined): string {
+        // Convert to number if it's a string (common with database DECIMAL fields)
+        let priceValue: number;
+
+        if (price === null || price === undefined) {
             return '0.0000';
         }
-        if (price < 0.000001) {
-            return price.toExponential(4);
+
+        if (typeof price === 'string') {
+            priceValue = parseFloat(price);
+            if (isNaN(priceValue)) {
+                return '0.0000';
+            }
+        } else if (typeof price === 'number') {
+            priceValue = price;
+            if (isNaN(priceValue)) {
+                return '0.0000';
+            }
+        } else {
+            return '0.0000';
         }
-        return price < 0.01 ? price.toFixed(6) : price.toFixed(4);
+
+        if (priceValue === 0) {
+            return '0.0000';
+        }
+
+        if (priceValue < 0.000001) {
+            return priceValue.toExponential(4);
+        }
+        return priceValue < 0.01 ? priceValue.toFixed(6) : priceValue.toFixed(4);
     }
 
-    private formatLargeNumber(num: number): string {
-        if (!num || typeof num !== 'number' || isNaN(num)) {
+    private formatLargeNumber(num: number | string | null | undefined): string {
+        // Convert to number if it's a string (common with database DECIMAL fields)
+        let numValue: number;
+
+        if (num === null || num === undefined) {
+            console.warn('formatLargeNumber received null/undefined value');
             return '$0.00';
         }
 
-        if (num >= 1e9) {
-            return `$${(num / 1e9).toFixed(2)}B`;
-        } else if (num >= 1e6) {
-            return `$${(num / 1e6).toFixed(2)}M`;
-        } else if (num >= 1e3) {
-            return `$${(num / 1e3).toFixed(2)}K`;
+        if (typeof num === 'string') {
+            numValue = parseFloat(num);
+            if (isNaN(numValue)) {
+                console.warn('formatLargeNumber received invalid string value:', num);
+                return '$0.00';
+            }
+        } else if (typeof num === 'number') {
+            numValue = num;
+            if (isNaN(numValue)) {
+                console.warn('formatLargeNumber received NaN');
+                return '$0.00';
+            }
+        } else {
+            console.warn('formatLargeNumber received unexpected type:', typeof num, num);
+            return '$0.00';
         }
-        return `$${num.toFixed(2)}`;
+
+        // Handle zero value specifically
+        if (numValue === 0) {
+            return '$0.00';
+        }
+
+        if (numValue >= 1e12) {
+            return `$${(numValue / 1e12).toFixed(2)}T`;
+        } else if (numValue >= 1e9) {
+            return `$${(numValue / 1e9).toFixed(2)}B`;
+        } else if (numValue >= 1e6) {
+            return `$${(numValue / 1e6).toFixed(2)}M`;
+        } else if (numValue >= 1e3) {
+            return `$${(numValue / 1e3).toFixed(2)}K`;
+        }
+        return `$${numValue.toFixed(2)}`;
     }
 
     public async sendMessage(chatId: string, message: string, options?: any): Promise<void> {
@@ -2203,6 +2262,34 @@ Condition: *${alert.condition.toUpperCase()}*
     // Public method for external cleanup calls (like from REST API)
     public async checkAndUpdateTokenMonitoring(tokenAddress: string): Promise<void> {
         return this.checkAndUpdateMonitoring(tokenAddress);
+    }
+
+    // Public method to start monitoring when a new alert is created
+    public async startMonitoringForNewAlert(tokenAddress: string): Promise<void> {
+        try {
+            console.log(`[TELEGRAM] Starting monitoring for new alert on token: ${tokenAddress.slice(0, 8)}...`);
+
+            // Check if this token has active alerts
+            const activeAlertsResult = await query(`
+                SELECT COUNT(*) as count 
+                FROM token_alerts 
+                WHERE token_address = $1 AND is_active = true AND is_triggered = false
+            `, [tokenAddress]);
+
+            const activeAlertsCount = parseInt(activeAlertsResult.rows[0].count);
+
+            if (activeAlertsCount > 0) {
+                // Start monitoring this token - this will fetch token data and set up websocket callbacks
+                await this.startMonitoringIfNeeded(tokenAddress);
+                console.log(`[TELEGRAM] Started websocket monitoring for token with ${activeAlertsCount} active alerts`);
+                console.log(`[TELEGRAM] Token data stored in alerts map for market cap calculations`);
+            } else {
+                console.log(`[TELEGRAM] No active alerts found for token, skipping monitoring start`);
+            }
+        } catch (error) {
+            console.error('[TELEGRAM] Error starting monitoring for new alert:', error);
+            throw error;
+        }
     }
 
     // User preset management

@@ -55,10 +55,31 @@ export const DiscordLinking: React.FC<DiscordLinkingProps> = ({ className = '' }
         }
     };
 
-    const copyDiscordBotLink = () => {
+    const copyDiscordBotLink = async () => {
         const botLink = 'https://discord.com/oauth2/authorize?client_id=1387645055594135623&permissions=930397416448&integration_type=0&scope=bot';
-        navigator.clipboard.writeText(botLink);
-        toast.success('Discord bot link copied to clipboard!');
+
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(botLink);
+                toast.success('Discord bot link copied to clipboard!');
+            } else {
+                // Fallback for older browsers or non-secure contexts
+                const textArea = document.createElement('textarea');
+                textArea.value = botLink;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                textArea.remove();
+                toast.success('Discord bot link copied to clipboard!');
+            }
+        } catch (err) {
+            console.error('Failed to copy to clipboard:', err);
+            toast.error('Failed to copy link. Please copy manually.');
+        }
     };
 
     if (isLinked) {

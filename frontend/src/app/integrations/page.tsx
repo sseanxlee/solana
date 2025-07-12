@@ -54,6 +54,17 @@ function IntegrationsContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
             )
+        },
+        {
+            id: 'extension',
+            name: 'Chrome Extension',
+            description: 'Browser extension for creating alerts directly from token pages and quick price overlay',
+            isConnected: false,
+            icon: (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+            )
         }
     ]);
 
@@ -103,6 +114,14 @@ function IntegrationsContent() {
                         isConnected: true,
                         connectedAccount: user.email,
                         lastUsed: 'Available'
+                    };
+                }
+                if (integration.id === 'extension' && user?.extensionLinked) {
+                    return {
+                        ...integration,
+                        isConnected: true,
+                        connectedAccount: 'Chrome Extension Linked',
+                        lastUsed: 'Active'
                     };
                 }
                 return integration;
@@ -171,6 +190,9 @@ function IntegrationsContent() {
                 </div>,
                 { duration: 3000, icon: '🔗' }
             );
+        } else if (integrationId === 'extension') {
+            // Open extension linking page
+            router.push('/link-extension');
         } else if (integrationId === 'email') {
             toast('Email integration is managed in Settings', { icon: 'ℹ️' });
         } else {
@@ -187,6 +209,11 @@ function IntegrationsContent() {
             });
         } else if (integrationId === 'discord') {
             toast('To manage Discord connection, use the Discord linking section below', {
+                icon: 'ℹ️',
+                duration: 5000
+            });
+        } else if (integrationId === 'extension') {
+            toast('To manage extension connection, go to link-extension page or use the extension popup', {
                 icon: 'ℹ️',
                 duration: 5000
             });

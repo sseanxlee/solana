@@ -3,6 +3,7 @@ import { getNonce, signIn, authenticateToken } from '../middleware/auth';
 import { query } from '../config/database';
 import { AuthRequest, ApiResponse } from '../types';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 
 const router = Router();
 
@@ -15,6 +16,14 @@ router.post('/signin', signIn);
 // GET /auth/me - Get current user info
 router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => {
     try {
+        // Check if user has a linked extension
+        const extensionResult = await query(
+            'SELECT id FROM user_extensions WHERE user_id = $1',
+            [req.user!.id]
+        );
+
+        const extensionLinked = extensionResult.rows.length > 0;
+
         res.json({
             success: true,
             data: {
@@ -22,7 +31,8 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
                 walletAddress: req.user!.wallet_address,
                 email: req.user!.email,
                 telegramChatId: req.user!.telegram_chat_id,
-                discordUserId: req.user!.discord_user_id
+                discordUserId: req.user!.discord_user_id,
+                extensionLinked: extensionLinked
             }
         } as ApiResponse);
     } catch (error) {
@@ -409,6 +419,214 @@ router.get('/discord-status', authenticateToken, async (req: AuthRequest, res: R
         res.status(500).json({
             success: false,
             error: 'Failed to check Discord status'
+        } as ApiResponse);
+    }
+});
+
+// POST /auth/extension/generate-link-token - Generate linking token (called by extension)
+router.post('/extension/generate-link-token', async (req, res: Response) => {
+    try {
+        const { connectionId, extensionId } = req.body;
+
+        if (!connectionId || typeof connectionId !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Connection ID is required'
+            } as ApiResponse);
+        }
+
+        // Generate secure token
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        // Clean up any existing tokens for this connection
+        await query(
+            'DELETE FROM extension_linking_tokens WHERE connection_id = $1',
+            [connectionId]
+        );
+
+        // Create new token
+        await query(`
+            INSERT INTO extension_linking_tokens (token, connection_id, extension_id, expires_at)
+            VALUES ($1, $2, $3, $4)
+        `, [token, connectionId, extensionId || null, expiresAt]);
+
+        console.log(`[EXTENSION LINK] Generated token for connection ${connectionId}`);
+
+        res.json({
+            success: true,
+            data: { token }
+        } as ApiResponse);
+
+    } catch (error) {
+        console.error('Error generating extension linking token:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate linking token'
+        } as ApiResponse);
+    }
+});
+
+// GET /auth/extension/token-info/:token - Get token info (called by frontend)
+router.get('/extension/token-info/:token', async (req, res: Response) => {
+    try {
+        const { token } = req.params;
+
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token is required'
+            } as ApiResponse);
+        }
+
+        const result = await query(`
+            SELECT connection_id, extension_id, expires_at, used
+            FROM extension_linking_tokens
+            WHERE token = $1
+        `, [token]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Invalid or expired token'
+            } as ApiResponse);
+        }
+
+        const tokenData = result.rows[0];
+
+        // Check if token has expired
+        if (new Date() > new Date(tokenData.expires_at)) {
+            return res.status(404).json({
+                success: false,
+                error: 'Token has expired'
+            } as ApiResponse);
+        }
+
+        if (tokenData.used) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token has already been used',
+                data: { isUsed: true }
+            } as ApiResponse);
+        }
+
+        res.json({
+            success: true,
+            data: {
+                connectionId: tokenData.connection_id,
+                extensionId: tokenData.extension_id,
+                isUsed: tokenData.used
+            }
+        } as ApiResponse);
+
+    } catch (error) {
+        console.error('Error getting extension token info:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get token information'
+        } as ApiResponse);
+    }
+});
+
+// POST /auth/extension/link-with-token - Link extension to wallet (called by frontend)
+router.post('/extension/link-with-token', authenticateToken, async (req: AuthRequest, res: Response) => {
+    try {
+        const { linkingToken } = req.body;
+
+        if (!linkingToken) {
+            return res.status(400).json({
+                success: false,
+                error: 'Linking token is required'
+            } as ApiResponse);
+        }
+
+        // Get token data
+        const tokenResult = await query(`
+            SELECT connection_id, extension_id, expires_at, used
+            FROM extension_linking_tokens
+            WHERE token = $1
+        `, [linkingToken]);
+
+        if (tokenResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Invalid linking token'
+            } as ApiResponse);
+        }
+
+        const tokenData = tokenResult.rows[0];
+
+        // Check if token has expired
+        if (new Date() > new Date(tokenData.expires_at)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Linking token has expired'
+            } as ApiResponse);
+        }
+
+        if (tokenData.used) {
+            return res.status(400).json({
+                success: false,
+                error: 'Linking token has already been used'
+            } as ApiResponse);
+        }
+
+        // Generate extension auth token (JWT - same format as regular auth)
+        const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+        const extensionToken = jwt.sign(
+            { userId: req.user!.id, walletAddress: req.user!.wallet_address },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // Create or update extension linking record
+        const existingExtension = await query(
+            'SELECT id FROM user_extensions WHERE user_id = $1',
+            [req.user!.id]
+        );
+
+        if (existingExtension.rows.length > 0) {
+            // Update existing extension record
+            await query(`
+                UPDATE user_extensions 
+                SET connection_id = $1, extension_token = $2, linked_at = CURRENT_TIMESTAMP
+                WHERE user_id = $3
+            `, [tokenData.connection_id, extensionToken, req.user!.id]);
+        } else {
+            // Create new extension record
+            await query(`
+                INSERT INTO user_extensions (user_id, connection_id, extension_token, linked_at)
+                VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            `, [req.user!.id, tokenData.connection_id, extensionToken]);
+        }
+
+        // Mark token as used
+        await query(
+            'UPDATE extension_linking_tokens SET used = TRUE, wallet_address = $1 WHERE token = $2',
+            [req.user!.wallet_address, linkingToken]
+        );
+
+        console.log(`[EXTENSION LINK] Successfully linked extension ${tokenData.connection_id} to wallet ${req.user!.wallet_address}`);
+
+        res.json({
+            success: true,
+            message: 'Extension linked successfully',
+            data: {
+                connectionId: tokenData.connection_id,
+                extensionToken: extensionToken,
+                userData: {
+                    id: req.user!.id,
+                    wallet_address: req.user!.wallet_address,
+                    discord_user_id: req.user!.discord_user_id
+                }
+            }
+        } as ApiResponse);
+
+    } catch (error) {
+        console.error('Error linking extension with token:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to link extension'
         } as ApiResponse);
     }
 });

@@ -98,9 +98,14 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
             return;
         }
 
-        // Check notification method is configured (only for telegram now)
+        // Check notification method is configured
         if (formData.notificationType === 'telegram' && !user?.telegramChatId) {
             toast.error('Please configure your Telegram in profile settings first');
+            return;
+        }
+
+        if (formData.notificationType === 'discord' && !user?.discordUserId) {
+            toast.error('Please link your Discord account first');
             return;
         }
 
@@ -192,12 +197,17 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                 return;
             }
 
-            // Determine notification method based on user preferences (prefer telegram)
-            const notificationMethod = user?.telegramChatId ? 'telegram' : 'telegram'; // Always use telegram for now
+            // Determine notification method based on user preferences
+            let notificationMethod: 'telegram' | 'discord' | 'email' = 'telegram';
+            if (user?.discordUserId) {
+                notificationMethod = 'discord';
+            } else if (user?.telegramChatId) {
+                notificationMethod = 'telegram';
+            }
 
             const alertData = {
                 ...formData,
-                notificationType: notificationMethod as 'email' | 'telegram'
+                notificationType: notificationMethod
             };
 
             try {
@@ -450,10 +460,12 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                 </label>
                 <select
                     value={formData.notificationType}
-                    onChange={(e) => handleInputChange('notificationType', e.target.value as 'email' | 'telegram')}
+                    onChange={(e) => handleInputChange('notificationType', e.target.value as 'email' | 'telegram' | 'discord' | 'extension')}
                     className="input-field"
                 >
                     <option value="telegram">Telegram</option>
+                    <option value="discord">Discord</option>
+                    <option value="extension">Browser Extension</option>
                     <option value="email">Email (Coming Soon)</option>
                 </select>
 
@@ -463,9 +475,21 @@ export default function CreateAlertForm({ onAlertCreated, onCancel, prefilledTok
                     </p>
                 )}
 
+                {formData.notificationType === 'discord' && !user?.discordUserId && (
+                    <p className="text-sm text-amber-600 mt-1">
+                        Please link your Discord account first
+                    </p>
+                )}
+
+                {formData.notificationType === 'extension' && (
+                    <p className="text-sm text-blue-600 mt-1">
+                        Extension alerts are typically created directly from the Chrome extension overlay.
+                    </p>
+                )}
+
                 {formData.notificationType === 'email' && (
                     <p className="text-sm text-blue-600 mt-1">
-                        Email notifications are coming soon. Use Telegram for now.
+                        Email notifications are coming soon. Use Telegram or Discord for now.
                     </p>
                 )}
             </div>

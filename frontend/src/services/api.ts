@@ -25,7 +25,7 @@ interface TokenAlert {
     threshold_type: 'price' | 'market_cap';
     threshold_value: number;
     condition: 'above' | 'below';
-    notification_type: 'email' | 'telegram' | 'discord';
+    notification_type: 'email' | 'telegram' | 'discord' | 'extension';
     is_active: boolean;
     is_triggered: boolean;
     triggered_at?: string;
@@ -39,7 +39,7 @@ interface CreateAlertRequest {
     thresholdType: 'price' | 'market_cap';
     thresholdValue: number;
     condition: 'above' | 'below';
-    notificationType: 'email' | 'telegram' | 'discord';
+    notificationType: 'email' | 'telegram' | 'discord' | 'extension';
 }
 
 interface UpdateAlertRequest {
@@ -544,6 +544,15 @@ class ApiService {
         discordUsername: string;
     }>> {
         return this.request('POST', '/auth/discord/link-with-token', { linkingToken });
+    }
+
+    // Extension linking
+    async linkExtensionWithToken(linkingToken: string): Promise<ApiResponse<{
+        connectionId: string;
+        extensionToken: string;
+        userData: any;
+    }>> {
+        return this.request('POST', '/auth/extension/link-with-token', { linkingToken });
     }
 
     // Admin endpoints

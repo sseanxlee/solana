@@ -169,6 +169,21 @@ export default function AlertsList({
         return `$${value.toLocaleString()}`;
     };
 
+    const formatNotificationType = (type: string) => {
+        switch (type) {
+            case 'extension':
+                return 'Browser Extension';
+            case 'telegram':
+                return 'Telegram';
+            case 'discord':
+                return 'Discord';
+            case 'email':
+                return 'Email';
+            default:
+                return type.charAt(0).toUpperCase() + type.slice(1);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -257,7 +272,7 @@ export default function AlertsList({
 
                                     <div className="flex items-center space-x-2">
                                         <span className="text-slate-500">Via:</span>
-                                        <span className="text-cyan-400 capitalize">{alert.notification_type}</span>
+                                        <span className="text-cyan-400">{formatNotificationType(alert.notification_type)}</span>
                                     </div>
 
                                     <div className="flex items-center space-x-2">

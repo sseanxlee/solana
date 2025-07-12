@@ -50,6 +50,7 @@ export class DiscordBotService {
     private tokenAlerts: Map<string, TokenAlertData> = new Map();
     private solPriceCache: { price: number; lastUpdated: number } | null = null;
     private pendingAlerts: Map<string, UserAlertState> = new Map();
+    private skipCommandRegistration: boolean = false;
 
     private constructor() {
         if (!DISCORD_TOKEN) {
@@ -57,6 +58,12 @@ export class DiscordBotService {
         }
         if (!DISCORD_CLIENT_ID) {
             throw new Error('DISCORD_CLIENT_ID environment variable is required');
+        }
+
+        // Check if command registration should be skipped
+        this.skipCommandRegistration = process.env.DISCORD_SKIP_COMMAND_REGISTRATION === 'true';
+        if (this.skipCommandRegistration) {
+            console.log('🚫 Discord command registration is disabled via environment variable');
         }
 
         this.client = new Client({
@@ -83,19 +90,58 @@ export class DiscordBotService {
 
     async start(): Promise<void> {
         if (!this.client || this.isRunning) {
+            console.log('Discord bot already running or client not initialized');
             return;
         }
 
         try {
+            console.log('🤖 Starting Discord bot...');
             this.isRunning = true;
+
+            console.log('📋 Setting up event handlers...');
             this.setupEventHandlers();
-            await this.registerSlashCommands();
+
+            if (!this.skipCommandRegistration) {
+                console.log('📝 Registering slash commands...');
+                // Make command registration non-blocking
+                this.registerSlashCommands().catch(error => {
+                    console.error('⚠️ Command registration failed, but continuing bot startup:', error);
+                });
+            } else {
+                console.log('⏭️ Skipping slash command registration (disabled)');
+            }
+
+            // Add more specific logging for the login process
+            console.log('🔐 Attempting to login to Discord...');
+            console.log('Token present:', !!DISCORD_TOKEN);
+            console.log('Token length:', DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
+            console.log('Client ID present:', !!DISCORD_CLIENT_ID);
+
+            if (!DISCORD_TOKEN || DISCORD_TOKEN === 'your_discord_bot_token_here') {
+                throw new Error('DISCORD_BOT_TOKEN is not properly configured');
+            }
+
+            if (!DISCORD_CLIENT_ID || DISCORD_CLIENT_ID === 'your_discord_client_id_here') {
+                throw new Error('DISCORD_CLIENT_ID is not properly configured');
+            }
+
             await this.client.login(DISCORD_TOKEN);
+
+            console.log('✅ Discord login completed');
             await this.resumeMonitoringForExistingAlerts();
             console.log('Discord bot started successfully');
         } catch (error) {
-            console.error('Error starting Discord bot:', error);
+            console.error('💥 Error starting Discord bot:', error);
+            if (error instanceof Error) {
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    code: (error as any).code,
+                    stack: error.stack
+                });
+            }
             this.isRunning = false;
+            throw error; // Re-throw to see the error in the main logs
         }
     }
 
@@ -114,8 +160,12 @@ export class DiscordBotService {
     }
 
     private async registerSlashCommands(): Promise<void> {
-        if (!DISCORD_CLIENT_ID) return;
+        if (!DISCORD_CLIENT_ID) {
+            console.log('❌ No DISCORD_CLIENT_ID provided, skipping command registration');
+            return;
+        }
 
+        console.log('🔧 Building slash commands...');
         const commands = [
             new SlashCommandBuilder()
                 .setName('start')
@@ -168,31 +218,82 @@ export class DiscordBotService {
         ];
 
         try {
+            console.log('🏗️ Creating REST client...');
             const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 
-            console.log('Started refreshing Discord application (/) commands.');
+            console.log('🧹 Started refreshing Discord application (/) commands.');
 
             // First, clear all existing commands to ensure clean registration
-            await rest.put(
-                Routes.applicationCommands(DISCORD_CLIENT_ID),
-                { body: [] }
-            );
+            console.log('🗑️ Clearing existing commands...');
 
-            console.log('Cleared existing Discord commands.');
+            const clearWithTimeout = new Promise(async (resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Clear commands timed out after 15 seconds'));
+                }, 15000);
 
-            // Wait a moment
-            await new Promise(resolve => setTimeout(resolve, 1000));
+                try {
+                    const result = await rest.put(
+                        Routes.applicationCommands(DISCORD_CLIENT_ID),
+                        { body: [] }
+                    );
+                    clearTimeout(timeout);
+                    resolve(result);
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            });
 
-            // Now register the new commands
-            await rest.put(
-                Routes.applicationCommands(DISCORD_CLIENT_ID),
-                { body: commands.map(command => command.toJSON()) }
-            );
+            await clearWithTimeout;
+            console.log('✅ Cleared existing Discord commands.');
 
-            console.log('Successfully reloaded Discord application (/) commands.');
-            console.log('Registered commands:', commands.map(cmd => cmd.name).join(', '));
+            // Wait a moment between clear and register
+            console.log('⏱️ Waiting 2 seconds before registering new commands...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Now register the new commands with longer timeout
+            console.log('📝 Registering new commands...');
+
+            const registerWithTimeout = new Promise(async (resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Command registration timed out after 45 seconds'));
+                }, 45000);
+
+                try {
+                    const result = await rest.put(
+                        Routes.applicationCommands(DISCORD_CLIENT_ID),
+                        { body: commands.map(command => command.toJSON()) }
+                    );
+                    clearTimeout(timeout);
+                    resolve(result);
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            });
+
+            const result = await registerWithTimeout;
+
+            console.log('✅ Successfully reloaded Discord application (/) commands.');
+            console.log('📋 Registered commands:', commands.map(cmd => cmd.name).join(', '));
+            console.log('🔢 Total commands registered:', Array.isArray(result) ? result.length : 'unknown');
+
+            console.log('🎯 Command registration completed successfully');
+
         } catch (error) {
-            console.error('Error registering Discord commands:', error);
+            console.error('💥 Error registering Discord commands:', error);
+
+            if (error instanceof Error) {
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    code: (error as any).code,
+                    status: (error as any).status
+                });
+            }
+
+            console.error('💥 Command registration failed. Bot will continue without slash commands.');
+            // Don't throw - let the bot continue to start
         }
     }
 
@@ -958,6 +1059,15 @@ export class DiscordBotService {
                 description += `Active Alerts: ${tokenData.alerts.length}\n\n`;
 
                 for (const alert of tokenData.alerts) {
+                    // Debug logging for threshold value
+                    console.log(`[DISCORD ALERT STATUS] Alert threshold debug:`, {
+                        threshold_type: alert.threshold_type,
+                        threshold_value: alert.threshold_value,
+                        threshold_value_type: typeof alert.threshold_value,
+                        condition: alert.condition,
+                        token_symbol: alert.token_symbol
+                    });
+
                     if (alert.threshold_type === 'market_cap') {
                         description += `• Market Cap ${alert.condition} ${this.formatLargeNumber(alert.threshold_value)}\n`;
                     } else if (alert.threshold_type === 'price_percentage') {
@@ -1124,45 +1234,49 @@ export class DiscordBotService {
             .setColor(0x9945FF)
             .setTimestamp();
 
-        const name = metadata?.name || marketData?.name || 'Unknown Token';
-        const symbol = metadata?.symbol || marketData?.symbol || 'Unknown';
+        const name = metadata?.name || 'Unknown Token';
+        const symbol = metadata?.symbol || 'Unknown';
 
         embed.setTitle(`🪙 ${name} ($${symbol})`);
         embed.setDescription(`\`${address}\``);
 
         if (marketData) {
+            // Calculate USD price by multiplying SOL price with token price
+            const solPrice = this.solPriceService.getSolPriceUSD();
+            const tokenPriceUSD = marketData.price * solPrice;
+
             embed.addFields(
                 {
                     name: '💰 Price (USD)',
-                    value: `$${this.formatPrice(marketData.price_usd || 0)}`,
+                    value: `$${this.formatPrice(tokenPriceUSD)}`,
                     inline: true
                 },
                 {
                     name: '🟣 Price (SOL)',
-                    value: `${this.formatPrice(marketData.price || 0)} SOL`,
+                    value: `${this.formatPrice(marketData.price)} SOL`,
                     inline: true
                 },
                 {
                     name: '📊 Market Cap',
-                    value: `${this.formatLargeNumber(marketData.market_cap || 0)}`,
+                    value: `${this.formatLargeNumber(marketData.market_cap)}`,
                     inline: true
                 }
             );
 
-            if (marketData.volume_24h) {
+            // Add FDV if available
+            if (marketData.fdv) {
                 embed.addFields({
-                    name: '📈 24h Volume',
-                    value: `${this.formatLargeNumber(marketData.volume_24h)}`,
+                    name: '💎 Fully Diluted Value',
+                    value: `${this.formatLargeNumber(marketData.fdv)}`,
                     inline: true
                 });
             }
 
-            if (marketData.price_change_24h !== undefined) {
-                const changeEmoji = marketData.price_change_24h >= 0 ? '📈' : '📉';
-                const changeColor = marketData.price_change_24h >= 0 ? '+' : '';
+            // Add liquidity if available
+            if (marketData.liquidity) {
                 embed.addFields({
-                    name: `${changeEmoji} 24h Change`,
-                    value: `${changeColor}${marketData.price_change_24h.toFixed(2)}%`,
+                    name: '💧 Liquidity',
+                    value: `${this.formatLargeNumber(marketData.liquidity)}`,
                     inline: true
                 });
             }
@@ -1315,12 +1429,14 @@ export class DiscordBotService {
 
         try {
             const marketData = await this.birdeyeService.getTokenMarketData(SOL_TOKEN_ADDRESS);
-            if (marketData && marketData.price_usd) {
+            if (marketData) {
+                // For SOL token, we need to get the USD price from our price service
+                const solPriceUSD = this.solPriceService.getSolPriceUSD();
                 this.solPriceCache = {
-                    price: marketData.price_usd,
+                    price: solPriceUSD,
                     lastUpdated: Date.now()
                 };
-                return marketData.price_usd;
+                return solPriceUSD;
             }
         } catch (error) {
             console.error('Error fetching SOL price from Birdeye:', error);
@@ -1343,25 +1459,76 @@ export class DiscordBotService {
         return 220;
     }
 
-    private formatPrice(price: number): string {
-        if (price >= 1) {
-            return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+    private formatPrice(price: number | string | null | undefined): string {
+        // Convert to number if it's a string (common with database DECIMAL fields)
+        let priceValue: number;
+
+        if (price === null || price === undefined) {
+            return '0.00';
+        }
+
+        if (typeof price === 'string') {
+            priceValue = parseFloat(price);
+            if (isNaN(priceValue)) {
+                return '0.00';
+            }
+        } else if (typeof price === 'number') {
+            priceValue = price;
+            if (isNaN(priceValue)) {
+                return '0.00';
+            }
         } else {
-            return price.toFixed(8).replace(/\.?0+$/, '');
+            return '0.00';
+        }
+
+        if (priceValue >= 1) {
+            return priceValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        } else {
+            return priceValue.toFixed(8).replace(/\.?0+$/, '');
         }
     }
 
-    private formatLargeNumber(num: number): string {
-        if (num >= 1e12) {
-            return `$${(num / 1e12).toFixed(2)}T`;
-        } else if (num >= 1e9) {
-            return `$${(num / 1e9).toFixed(2)}B`;
-        } else if (num >= 1e6) {
-            return `$${(num / 1e6).toFixed(2)}M`;
-        } else if (num >= 1e3) {
-            return `$${(num / 1e3).toFixed(2)}K`;
+    private formatLargeNumber(num: number | string | null | undefined): string {
+        // Convert to number if it's a string (common with database DECIMAL fields)
+        let numValue: number;
+
+        if (num === null || num === undefined) {
+            console.warn('formatLargeNumber received null/undefined value');
+            return '$0.00';
+        }
+
+        if (typeof num === 'string') {
+            numValue = parseFloat(num);
+            if (isNaN(numValue)) {
+                console.warn('formatLargeNumber received invalid string value:', num);
+                return '$0.00';
+            }
+        } else if (typeof num === 'number') {
+            numValue = num;
+            if (isNaN(numValue)) {
+                console.warn('formatLargeNumber received NaN');
+                return '$0.00';
+            }
         } else {
-            return `$${num.toFixed(2)}`;
+            console.warn('formatLargeNumber received unexpected type:', typeof num, num);
+            return '$0.00';
+        }
+
+        // Handle zero value specifically
+        if (numValue === 0) {
+            return '$0.00';
+        }
+
+        if (numValue >= 1e12) {
+            return `$${(numValue / 1e12).toFixed(2)}T`;
+        } else if (numValue >= 1e9) {
+            return `$${(numValue / 1e9).toFixed(2)}B`;
+        } else if (numValue >= 1e6) {
+            return `$${(numValue / 1e6).toFixed(2)}M`;
+        } else if (numValue >= 1e3) {
+            return `$${(numValue / 1e3).toFixed(2)}K`;
+        } else {
+            return `$${numValue.toFixed(2)}`;
         }
     }
 
@@ -1389,7 +1556,166 @@ export class DiscordBotService {
     }
 
     private setupStreamingCallbacks(): void {
-        // Implementation similar to Telegram bot
+        console.log('DiscordBot: Setting up streaming callbacks...');
+        this.streamingService.setCallbacks({
+            onSwap: (notification) => {
+                console.log('DiscordBot: onSwap callback triggered');
+                this.handleSwapNotification(notification);
+            },
+            onPing: () => {
+                console.log('DiscordBot: onPing callback triggered');
+                this.handlePingNotification();
+            },
+            onError: (error) => {
+                console.log('DiscordBot: onError callback triggered');
+                this.handleStreamingError(error);
+            },
+            onStatus: (status) => {
+                console.log('DiscordBot: onStatus callback triggered');
+                this.handleStreamingStatus(status);
+            }
+        });
+        console.log('DiscordBot: Streaming callbacks set up successfully');
+    }
+
+    private async handleSwapNotification(notification: any): Promise<void> {
+        console.log('DiscordBot: handleSwapNotification called!', notification);
+
+        const { swap, blockTime, signature, slot } = notification;
+        const tokenAddress = swap.baseTokenMint;
+        const shortToken = `${tokenAddress.slice(0, 8)}...${tokenAddress.slice(-8)}`;
+
+        // Get token data for market cap calculation
+        const tokenData = this.tokenAlerts.get(tokenAddress);
+        if (!tokenData) {
+            console.log('DiscordBot: No token data found for market cap calculation');
+            return;
+        }
+
+        // Update the last price
+        const newPrice = parseFloat(swap.quotePrice);
+        tokenData.lastPrice = newPrice;
+        this.tokenAlerts.set(tokenAddress, tokenData);
+
+        // Get current global SOL price
+        const solPriceUSD = this.solPriceService.getSolPriceUSD();
+
+        // Calculate new market cap using the correct formula: circulating_supply * sol_price_usd * quote_price
+        const newMarketCap = this.solPriceService.calculateMarketCap(tokenData.circulatingSupply, newPrice);
+
+        // Display market cap calculation in terminal with clear formatting
+        console.log('═'.repeat(80));
+        console.log('📊 MARKET CAP CALCULATION - PRICE PING [DISCORD BOT]');
+        console.log('═'.repeat(80));
+        console.log(`Token: ${tokenData.name} (${tokenData.symbol})`);
+        console.log(`Address: ${tokenAddress}`);
+        console.log('');
+        console.log('Market Cap Formula: circulating_supply × sol_price_usd × quote_price');
+        console.log(`Circulating Supply: ${tokenData.circulatingSupply.toLocaleString()}`);
+        console.log(`SOL Price (USD): $${solPriceUSD.toFixed(8)}`);
+        console.log(`Quote Price (SOL): ${newPrice.toFixed(8)}`);
+        console.log(`Token Price (USD): $${(newPrice * solPriceUSD).toFixed(8)}`);
+        console.log('');
+        console.log(`Calculation: ${tokenData.circulatingSupply.toLocaleString()} × ${solPriceUSD.toFixed(8)} × ${newPrice.toFixed(8)}`);
+        console.log(`Market Cap: $${newMarketCap.toLocaleString()}`);
+        console.log('');
+        console.log(`Swap Type: ${swap.swapType.toUpperCase()}`);
+        console.log(`Amount: ${parseFloat(swap.baseAmount).toLocaleString()}`);
+        console.log(`Exchange: ${swap.sourceExchange || 'Unknown'}`);
+        console.log(`Time: ${new Date(blockTime * 1000).toLocaleString()}`);
+        console.log(`Tx: ${signature}`);
+        console.log('═'.repeat(80));
+
+        // Check for triggered alerts (assuming this method exists in monitoring service)
+        await this.checkAndTriggerAlertsForToken(tokenAddress, newPrice, newMarketCap);
+    }
+
+    private async handlePingNotification(): Promise<void> {
+        console.log('DiscordBot: handlePingNotification called!');
+
+        const currentToken = this.streamingService.getCurrentToken();
+        console.log(`[DISCORD] WebSocket Ping - Monitoring: ${currentToken ? `${currentToken.slice(0, 8)}...${currentToken.slice(-8)}` : 'None'} - Status: Active - Time: ${new Date().toLocaleString()}`);
+    }
+
+    private async handleStreamingError(error: string): Promise<void> {
+        console.log(`[DISCORD] WebSocket Error: ${error}`);
+    }
+
+    private async handleStreamingStatus(status: string): Promise<void> {
+        console.log(`[DISCORD] WebSocket Status: ${status}`);
+    }
+
+    private async checkAndTriggerAlertsForToken(tokenAddress: string, currentPrice: number, currentMarketCap: number): Promise<void> {
+        try {
+            // Get all active alerts for this token with Discord notification type
+            const alerts = await query(`
+                SELECT ta.*, u.discord_user_id 
+                FROM token_alerts ta 
+                JOIN users u ON ta.user_id = u.id 
+                WHERE ta.token_address = $1 AND ta.is_active = true AND ta.is_triggered = false 
+                AND (ta.notification_type = 'discord' OR ta.notification_type = 'extension')
+            `, [tokenAddress]);
+
+            let alertsTriggered = false;
+
+            for (const alert of alerts.rows) {
+                let shouldTrigger = false;
+                let currentValue = 0;
+
+                if (alert.threshold_type === 'price') {
+                    const solPriceUSD = this.solPriceService.getSolPriceUSD();
+                    currentValue = currentPrice * solPriceUSD;
+                } else if (alert.threshold_type === 'market_cap') {
+                    currentValue = currentMarketCap;
+                }
+
+                // Check if alert should trigger
+                if (alert.condition === 'above') {
+                    shouldTrigger = currentValue > alert.threshold_value;
+                } else if (alert.condition === 'below') {
+                    shouldTrigger = currentValue < alert.threshold_value;
+                }
+
+                if (shouldTrigger) {
+                    alertsTriggered = true;
+
+                    // Mark alert as triggered
+                    await query(`
+                        UPDATE token_alerts 
+                        SET is_triggered = TRUE, triggered_at = CURRENT_TIMESTAMP, is_active = FALSE
+                        WHERE id = $1
+                    `, [alert.id]);
+
+                    // Send Discord notification if it's a Discord alert
+                    if (alert.notification_type === 'discord' && alert.discord_user_id) {
+                        const message = `🚨 **ALERT TRIGGERED!** 🚨
+
+**Token:** ${alert.token_name || 'Unknown'} ($${alert.token_symbol || 'UNKNOWN'})
+**Alert Type:** ${alert.threshold_type.replace('_', ' ').toUpperCase()}
+**Target:** $${alert.threshold_value.toLocaleString()}
+**Current:** $${currentValue.toLocaleString()}
+**Condition:** ${alert.condition.toUpperCase()}
+
+🎯 Your alert has been triggered and removed!`;
+
+                        await this.sendMessage(alert.discord_user_id, message);
+                    }
+
+                    // Print horizontal rule for visibility
+                    console.log('═'.repeat(80));
+                    console.log('🚨 DISCORD ALERT TRIGGERED 🚨');
+                    console.log(`Alert triggered for user ${alert.discord_user_id || 'extension'}: ${alert.token_symbol} ${alert.threshold_type} ${alert.condition} ${alert.threshold_value} (current: ${currentValue})`);
+                    console.log('═'.repeat(80));
+                }
+            }
+
+            // If any alerts were triggered, check if we should stop monitoring this token
+            if (alertsTriggered) {
+                await this.checkAndUpdateMonitoring(tokenAddress);
+            }
+        } catch (error) {
+            console.error('DiscordBot: Error checking and triggering alerts:', error);
+        }
     }
 
     private async resumeMonitoringForExistingAlerts(): Promise<void> {
@@ -1409,6 +1735,15 @@ export class DiscordBotService {
 
     public isRunningBot(): boolean {
         return this.isRunning;
+    }
+
+    public setSkipCommandRegistration(skip: boolean): void {
+        this.skipCommandRegistration = skip;
+        console.log(`🔧 Discord command registration ${skip ? 'disabled' : 'enabled'}`);
+    }
+
+    public isCommandRegistrationSkipped(): boolean {
+        return this.skipCommandRegistration;
     }
 
     // Alert system methods
@@ -1844,7 +2179,7 @@ Type "cancel" anytime to stop.`)
         } catch (error) {
             console.error('Error creating percentage alert:', error);
 
-            if (error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
+            if (error instanceof Error && error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
                 const embed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🔗 Account Linking Required')
@@ -1960,7 +2295,7 @@ Type "cancel" anytime to stop.`)
         } catch (error) {
             console.error('Error creating market cap alert:', error);
 
-            if (error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
+            if (error instanceof Error && error.message === 'DISCORD_ACCOUNT_LINKING_REQUIRED') {
                 const embed = new EmbedBuilder()
                     .setColor(0x5865F2)
                     .setTitle('🔗 Account Linking Required')
@@ -2062,7 +2397,7 @@ Type "cancel" anytime to stop.`)
             // Start monitoring if needed
             await this.startMonitoringIfNeeded(tokenAddress);
         } catch (error) {
-            if (error.message === 'DISCORD_USER_NOT_LINKED') {
+            if (error instanceof Error && error.message === 'DISCORD_USER_NOT_LINKED') {
                 // User needs to link their account - provide helpful Discord-native guidance
                 throw new Error('DISCORD_ACCOUNT_LINKING_REQUIRED');
             }
@@ -2095,7 +2430,7 @@ Type "cancel" anytime to stop.`)
 
             console.log(`[DISCORD] User ${userId} is properly linked to wallet ${user.wallet_address}`);
         } catch (error) {
-            if (error.message === 'DISCORD_USER_NOT_LINKED') {
+            if (error instanceof Error && error.message === 'DISCORD_USER_NOT_LINKED') {
                 throw error; // Re-throw our custom error
             }
             console.error('Error ensuring Discord user exists:', error);
@@ -2201,6 +2536,34 @@ Type "cancel" anytime to stop.`)
     // Monitoring cleanup functionality (similar to Telegram bot)
     public async checkAndUpdateTokenMonitoring(tokenAddress: string): Promise<void> {
         return this.checkAndUpdateMonitoring(tokenAddress);
+    }
+
+    // Public method to start monitoring when a new alert is created
+    public async startMonitoringForNewAlert(tokenAddress: string): Promise<void> {
+        try {
+            console.log(`[DISCORD] Starting monitoring for new alert on token: ${tokenAddress.slice(0, 8)}...`);
+
+            // Check if this token has active alerts
+            const activeAlertsResult = await query(`
+                SELECT COUNT(*) as count 
+                FROM token_alerts 
+                WHERE token_address = $1 AND is_active = true AND is_triggered = false
+            `, [tokenAddress]);
+
+            const activeAlertsCount = parseInt(activeAlertsResult.rows[0].count);
+
+            if (activeAlertsCount > 0) {
+                // Start monitoring this token - this will fetch token data and set up websocket callbacks
+                await this.startMonitoringIfNeeded(tokenAddress);
+                console.log(`[DISCORD] Started websocket monitoring for token with ${activeAlertsCount} active alerts`);
+                console.log(`[DISCORD] Token data stored in alerts map for market cap calculations`);
+            } else {
+                console.log(`[DISCORD] No active alerts found for token, skipping monitoring start`);
+            }
+        } catch (error) {
+            console.error('[DISCORD] Error starting monitoring for new alert:', error);
+            throw error;
+        }
     }
 
     private async checkAndUpdateMonitoring(triggeredTokenAddress: string): Promise<void> {

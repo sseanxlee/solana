@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import { TokenService } from '../services/tokenService';
 import { MonitoringService } from '../services/monitoringService';
 import { TelegramBotService } from '../services/telegramBotService';
+import { DiscordBotService } from '../services/discordBotService';
 import { AuthRequest, TokenAlert, ApiResponse } from '../types';
 
 const router = Router();
@@ -78,6 +79,13 @@ router.post('/', async (req: AuthRequest, res: Response) => {
             notificationType
         } = req.body;
 
+        // Debug logging for received data
+        console.log('🔍 DEBUG - Received alert creation request:');
+        console.log('req.body:', req.body);
+        console.log('thresholdValue:', thresholdValue, typeof thresholdValue);
+        console.log('thresholdType:', thresholdType);
+        console.log('condition:', condition);
+
         // Validation
         if (!tokenAddress || !thresholdType || !thresholdValue || !condition || !notificationType) {
             return res.status(400).json({
@@ -112,10 +120,10 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         }
 
         // Validate notification type
-        if (!['email', 'telegram', 'discord'].includes(notificationType)) {
+        if (!['email', 'telegram', 'discord', 'extension'].includes(notificationType)) {
             return res.status(400).json({
                 success: false,
-                error: 'Notification type must be either "email", "telegram", or "discord"'
+                error: 'Notification type must be either "email", "telegram", "discord", or "extension"'
             } as ApiResponse);
         }
 
@@ -151,6 +159,19 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         const tokenData = await tokenService.getTokenData(tokenAddress);
 
         // Create alert
+        console.log('🔍 DEBUG - About to insert into database:');
+        console.log('thresholdNum after parsing:', thresholdNum, typeof thresholdNum);
+        console.log('Insert values:', [
+            req.user!.id,
+            tokenAddress,
+            tokenData?.name || null,
+            tokenData?.symbol || null,
+            thresholdType,
+            thresholdNum,
+            condition,
+            notificationType
+        ]);
+
         const result = await query(
             `INSERT INTO token_alerts 
        (user_id, token_address, token_name, token_symbol, threshold_type, threshold_value, condition, notification_type)
@@ -169,6 +190,45 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         );
 
         const newAlert = result.rows[0] as TokenAlert;
+        console.log('🔍 DEBUG - Successfully inserted alert:');
+        console.log('newAlert.threshold_value:', newAlert.threshold_value, typeof newAlert.threshold_value);
+
+        // Start immediate monitoring for the token (like Discord/Telegram bots do)
+        try {
+            console.log(`🔄 Starting immediate monitoring for token: ${tokenAddress} (alert created via ${notificationType})`);
+
+            // Use the appropriate bot service to start monitoring
+            if (notificationType === 'discord') {
+                const discordBotService = DiscordBotService.getInstance();
+                if (discordBotService.isRunningBot()) {
+                    await discordBotService.startMonitoringForNewAlert(tokenAddress);
+                }
+            } else if (notificationType === 'telegram') {
+                const telegramBotService = TelegramBotService.getInstance();
+                if (telegramBotService.isRunningBot()) {
+                    await telegramBotService.startMonitoringForNewAlert(tokenAddress);
+                }
+            } else {
+                // For extension alerts or when bots aren't running, 
+                // we need to start monitoring directly
+                const discordBotService = DiscordBotService.getInstance();
+                const telegramBotService = TelegramBotService.getInstance();
+
+                // Try Discord service first, then Telegram
+                if (discordBotService.isRunningBot()) {
+                    await discordBotService.startMonitoringForNewAlert(tokenAddress);
+                    console.log(`✅ Started monitoring via Discord service for extension alert`);
+                } else if (telegramBotService.isRunningBot()) {
+                    await telegramBotService.startMonitoringForNewAlert(tokenAddress);
+                    console.log(`✅ Started monitoring via Telegram service for extension alert`);
+                } else {
+                    console.log(`⚠️ No bot services running - monitoring will start when cron job runs`);
+                }
+            }
+        } catch (monitoringError) {
+            console.error('Warning: Failed to start immediate monitoring, will be picked up by cron job:', monitoringError);
+            // Don't fail the alert creation if monitoring fails to start
+        }
 
         res.status(201).json({
             success: true,

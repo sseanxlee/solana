@@ -17,10 +17,10 @@
     border: 1px solid #475569;
     border-radius: 8px;
     padding: 0;
-    width: 300px;
-    height: 120px;
-    min-width: 200px;
-    min-height: 100px;
+    width: 280px;
+    height: 240px;
+    min-width: 260px;
+    min-height: 240px;
     position: fixed;
     top: 0;
     left: 0;
@@ -30,6 +30,9 @@
     animation: strideContentSlideIn 0.3s ease-out;
     resize: none;
     /* Disable browser default resize */
+    --scale-factor: 1;
+    --width-scale: 1;
+    --height-scale: 1;
 }
 
 .stride-header {
@@ -50,19 +53,29 @@
     cursor: grabbing;
 }
 
+.stride-title-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
 .stride-header h2 {
-    font-size: 14px;
-    font-weight: 500;
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    margin: 0;
-    color: #f1f5f9;
     font-family: 'Exo 2', 'Segoe UI', sans-serif;
     font-size: 12px;
     font-weight: 500;
+    margin: 0;
+    color: #f1f5f9;
     letter-spacing: 0;
-    text-align: center;
+}
+
+.stride-title-section .token-address {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: #94a3b8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    user-select: all;
 }
 
 .stride-close-btn {
@@ -95,6 +108,17 @@
     border-radius: 0 0 7px 7px;
     height: calc(100% - 38px);
     overflow: auto;
+    cursor: grab;
+    user-select: none;
+}
+
+.stride-body:active {
+    cursor: grabbing;
+}
+
+.stride-body .token-address {
+    user-select: all;
+    /* Allow text selection for the address */
 }
 
 .stride-token-info {
@@ -214,4 +238,372 @@
         opacity: 1;
         transform: scale(1) translateY(0);
     }
+}
+
+@keyframes strideFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Market Cap Alert Panel Styles */
+.stride-alert-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: 'Exo 2', 'Segoe UI', sans-serif;
+    min-height: 200px;
+    font-size: 12px;
+}
+
+.alert-type-section {
+    margin-bottom: 8px;
+    min-height: 32px;
+    flex-shrink: 0;
+}
+
+.alert-type-tabs {
+    display: flex;
+    gap: 4px;
+}
+
+.alert-tab {
+    flex: 1;
+    background: #334155;
+    border: 1px solid #475569;
+    color: #cbd5e1;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.alert-tab:hover {
+    background: #475569;
+    color: #f1f5f9;
+}
+
+.alert-tab.active {
+    background: #0ea5e9;
+    border-color: #0284c7;
+    color: #f0f9ff;
+}
+
+.presets-section {
+    flex: 1;
+    min-height: 60px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(4px * var(--scale-factor, 1));
+}
+
+.preset-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: calc(4px * var(--scale-factor, 1));
+    min-height: calc(60px * var(--height-scale, 1));
+    flex: 1;
+    grid-template-rows: repeat(2, minmax(calc(32px * var(--height-scale, 1)), 1fr));
+}
+
+.preset-btn {
+    background: #334155;
+    border: 1px solid #475569;
+    color: #cbd5e1;
+    padding: calc(8px * var(--scale-factor)) calc(6px * var(--scale-factor));
+    border-radius: 4px;
+    font-size: calc(12px * var(--scale-factor));
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(32px * var(--height-scale));
+}
+
+.preset-btn:hover {
+    background: #475569;
+    color: #f1f5f9;
+}
+
+.preset-btn.selected {
+    background: #0ea5e9;
+    border-color: #0284c7;
+    color: #f0f9ff;
+}
+
+.edit-presets-btn {
+    background: #475569;
+    border: 1px solid #64748b;
+    color: #94a3b8;
+    padding: calc(8px * var(--scale-factor)) calc(6px * var(--scale-factor));
+    border-radius: 4px;
+    font-size: calc(10px * var(--scale-factor));
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(32px * var(--height-scale));
+}
+
+.edit-presets-btn:hover {
+    background: #64748b;
+    color: #f1f5f9;
+}
+
+.custom-section {
+    flex-shrink: 0;
+    min-height: 24px;
+}
+
+.custom-toggle {
+    text-align: center;
+}
+
+.custom-toggle-btn {
+    background: transparent;
+    border: none;
+    color: #0ea5e9;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+.custom-toggle-btn:hover {
+    background: #0ea5e9/20;
+    color: #38bdf8;
+}
+
+.custom-input {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.custom-input input {
+    flex: 1;
+    background: #334155;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+}
+
+.custom-input input:focus {
+    border-color: #0ea5e9;
+}
+
+.set-btn {
+    background: #0ea5e9;
+    border: none;
+    color: #f0f9ff;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.set-btn:hover {
+    background: #0284c7;
+}
+
+.selection-display {
+    background: #1e293b;
+    border: 1px solid #475569;
+    padding: 6px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    min-height: 20px;
+}
+
+.selection-text {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.3;
+}
+
+.action-buttons {
+    flex-shrink: 0;
+    min-height: 32px;
+}
+
+.create-alert-btn {
+    width: 100%;
+    background: #0ea5e9;
+    border: none;
+    color: #f0f9ff;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.create-alert-btn:hover:not(.disabled) {
+    background: #0284c7;
+}
+
+.create-alert-btn.disabled {
+    background: #475569;
+    color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Preset Editing Modal */
+.preset-edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000001;
+    font-family: 'Exo 2', 'Segoe UI', sans-serif;
+}
+
+.preset-edit-content {
+    background: #0f172a;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 20px;
+    width: 500px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.preset-edit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 15px;
+}
+
+.preset-edit-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.preset-edit-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preset-edit-close:hover {
+    background: #334155;
+    color: #f1f5f9;
+}
+
+.preset-type-section {
+    margin-bottom: 20px;
+}
+
+.preset-type-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-bottom: 10px;
+}
+
+.preset-inputs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.preset-input {
+    background: #334155;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+    text-align: center;
+}
+
+.preset-input:focus {
+    border-color: #0ea5e9;
+}
+
+.preset-edit-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #334155;
+}
+
+.preset-save-btn {
+    flex: 1;
+    background: #0ea5e9;
+    border: none;
+    color: #f0f9ff;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.preset-save-btn:hover {
+    background: #0284c7;
+}
+
+.preset-reset-btn {
+    flex: 1;
+    background: #64748b;
+    border: none;
+    color: #f1f5f9;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.preset-reset-btn:hover {
+    background: #475569;
 }
