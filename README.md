@@ -121,26 +121,7 @@ Connect your Phantom wallet to manage alerts through the web dashboard or create
 - `POST /api/telegram/link` - Link Telegram account
 - `POST /api/extension/link` - Link browser extension
 
-## Environment Variables
 
-Required:
-```bash
-DATABASE_URL=postgresql://user:pass@localhost:5432/db
-REDIS_URL=redis://localhost:6379
-JWT_SECRET=your-secret-key
-MORALIS_API_KEY=your-moralis-key
-SENDGRID_API_KEY=your-sendgrid-key
-TELEGRAM_BOT_TOKEN=your-telegram-token
-DISCORD_BOT_TOKEN=your-discord-token
-DISCORD_CLIENT_ID=your-discord-client-id
-```
-
-Optional:
-```bash
-BIRDEYE_API_KEY=enhanced-data-source
-SOLANA_STREAMING_API_KEY=real-time-updates
-NEXT_PUBLIC_USE_MORALIS_SEARCH=true
-```
 
 ## Services
 
@@ -153,17 +134,7 @@ The backend runs several services:
 - **Solana Streaming Service**: Real-time price updates
 - **Token Service**: Caches and fetches token data
 
-## Bot Setup
 
-### Discord Bot
-1. Create application at https://discord.com/developers/applications
-2. Add bot to server with permissions: `Send Messages`, `Use Slash Commands`
-3. Set `DISCORD_BOT_TOKEN` and `DISCORD_CLIENT_ID` in .env
-
-### Telegram Bot
-1. Message @BotFather on Telegram
-2. Create new bot with `/newbot`
-3. Set `TELEGRAM_BOT_TOKEN` in .env
 
 ## Chrome Extension
 
